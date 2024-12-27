@@ -414,7 +414,7 @@ impl PickerDelegate for NewPathDelegate {
             ListItem::new(ix)
                 .spacing(ListItemSpacing::Sparse)
                 .inset(true)
-                .toggle_state(selected)
+                .selected(selected)
                 .child(LabelLike::new().child(m.styled_text(self.project.read(cx), cx))),
         )
     }

@@ -48,7 +48,7 @@ impl Render for TabStory {
                 h_flex()
                     .child(
                         Tab::new("tab_1")
-                            .toggle_state(true)
+                            .selected(true)
                             .position(TabPosition::First)
                             .child("Tab 1"),
                     )
@@ -85,7 +85,7 @@ impl Render for TabStory {
                     .child(
                         Tab::new("tab_4")
                             .position(TabPosition::Last)
-                            .toggle_state(true)
+                            .selected(true)
                             .child("Tab 4"),
                     ),
             )
@@ -100,7 +100,7 @@ impl Render for TabStory {
                     .child(
                         Tab::new("tab_2")
                             .position(TabPosition::Middle(Ordering::Equal))
-                            .toggle_state(true)
+                            .selected(true)
                             .child("Tab 2"),
                     )
                     .child(

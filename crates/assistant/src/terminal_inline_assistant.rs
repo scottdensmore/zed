@@ -20,7 +20,7 @@ use language::Buffer;
 use language_model::{
     LanguageModelRegistry, LanguageModelRequest, LanguageModelRequestMessage, Role,
 };
-use language_model_selector::{LanguageModelSelector, LanguageModelSelectorPopoverMenu};
+use language_model_selector::LanguageModelSelector;
 use language_models::report_assistant_event;
 use settings::{update_settings_file, Settings};
 use std::{
@@ -476,9 +476,9 @@ enum PromptEditorEvent {
 
 struct PromptEditor {
     id: TerminalInlineAssistId,
+    fs: Arc<dyn Fs>,
     height_in_lines: u8,
     editor: View<Editor>,
-    language_model_selector: View<LanguageModelSelector>,
     edited_since_done: bool,
     prompt_history: VecDeque<String>,
     prompt_history_ix: Option<usize>,
@@ -614,8 +614,17 @@ impl Render for PromptEditor {
                     .w_12()
                     .justify_center()
                     .gap_2()
-                    .child(LanguageModelSelectorPopoverMenu::new(
-                        self.language_model_selector.clone(),
+                    .child(LanguageModelSelector::new(
+                        {
+                            let fs = self.fs.clone();
+                            move |model, cx| {
+                                update_settings_file::<AssistantSettings>(
+                                    fs.clone(),
+                                    cx,
+                                    move |settings, _| settings.set_model(model.clone()),
+                                );
+                            }
+                        },
                         IconButton::new("context", IconName::SettingsAlt)
                             .shape(IconButtonShape::Square)
                             .icon_size(IconSize::Small)
@@ -709,19 +718,6 @@ impl PromptEditor {
             id,
             height_in_lines: 1,
             editor: prompt_editor,
-            language_model_selector: cx.new_view(|cx| {
-                let fs = fs.clone();
-                LanguageModelSelector::new(
-                    move |model, cx| {
-                        update_settings_file::<AssistantSettings>(
-                            fs.clone(),
-                            cx,
-                            move |settings, _| settings.set_model(model.clone()),
-                        );
-                    },
-                    cx,
-                )
-            }),
             edited_since_done: false,
             prompt_history,
             prompt_history_ix: None,
@@ -729,6 +725,7 @@ impl PromptEditor {
             _codegen_subscription: cx.observe(&codegen, Self::handle_codegen_changed),
             editor_subscriptions: Vec::new(),
             codegen,
+            fs,
             pending_token_count: Task::ready(Ok(())),
             token_count: None,
             _token_count_subscriptions: token_count_subscriptions,

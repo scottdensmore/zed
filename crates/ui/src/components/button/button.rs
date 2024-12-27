@@ -194,7 +194,7 @@ impl Button {
     }
 }
 
-impl Toggleable for Button {
+impl Selectable for Button {
     /// Sets the selected state of the button.
     ///
     /// This method allows the selection state of the button to be specified.
@@ -213,8 +213,8 @@ impl Toggleable for Button {
     /// ```
     ///
     /// Use [`selected_style`](Button::selected_style) to change the style of the button when it is selected.
-    fn toggle_state(mut self, selected: bool) -> Self {
-        self.base = self.base.toggle_state(selected);
+    fn selected(mut self, selected: bool) -> Self {
+        self.base = self.base.selected(selected);
         self
     }
 }
@@ -405,7 +405,7 @@ impl RenderOnce for Button {
                     this.children(self.icon.map(|icon| {
                         ButtonIcon::new(icon)
                             .disabled(is_disabled)
-                            .toggle_state(is_selected)
+                            .selected(is_selected)
                             .selected_icon(self.selected_icon)
                             .selected_icon_color(self.selected_icon_color)
                             .size(self.icon_size)
@@ -429,7 +429,7 @@ impl RenderOnce for Button {
                     this.children(self.icon.map(|icon| {
                         ButtonIcon::new(icon)
                             .disabled(is_disabled)
-                            .toggle_state(is_selected)
+                            .selected(is_selected)
                             .selected_icon(self.selected_icon)
                             .selected_icon_color(self.selected_icon_color)
                             .size(self.icon_size)
@@ -445,7 +445,7 @@ impl ComponentPreview for Button {
         "A button allows users to take actions, and make choices, with a single tap."
     }
 
-    fn examples(_: &mut WindowContext) -> Vec<ComponentExampleGroup<Self>> {
+    fn examples(_: &WindowContext) -> Vec<ComponentExampleGroup<Self>> {
         vec![
             example_group_with_title(
                 "Styles",
@@ -500,7 +500,7 @@ impl ComponentPreview for Button {
                     ),
                     single_example(
                         "Selected",
-                        Button::new("selected", "Selected").toggle_state(true),
+                        Button::new("selected", "Selected").selected(true),
                     ),
                 ],
             ),

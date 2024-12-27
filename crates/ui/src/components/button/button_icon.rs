@@ -65,8 +65,8 @@ impl Disableable for ButtonIcon {
     }
 }
 
-impl Toggleable for ButtonIcon {
-    fn toggle_state(mut self, selected: bool) -> Self {
+impl Selectable for ButtonIcon {
+    fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
     }

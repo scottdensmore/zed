@@ -268,7 +268,7 @@ impl BladeAtlasState {
     fn flush(&mut self, encoder: &mut gpu::CommandEncoder) {
         self.flush_initializations(encoder);
 
-        let mut transfers = encoder.transfer("atlas");
+        let mut transfers = encoder.transfer();
         for upload in self.uploads.drain(..) {
             let texture = &self.storage[upload.id];
             transfers.copy_buffer_to_texture(

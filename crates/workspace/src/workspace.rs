@@ -92,8 +92,12 @@ use task::SpawnInTerminal;
 use theme::{ActiveTheme, SystemAppearance, ThemeSettings};
 pub use toolbar::{Toolbar, ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView};
 pub use ui;
-use ui::prelude::*;
-use util::{paths::SanitizedPath, serde::default_true, ResultExt, TryFutureExt};
+use ui::{
+    div, h_flex, px, BorrowAppContext, Context as _, Div, FluentBuilder, InteractiveElement as _,
+    IntoElement, ParentElement as _, Pixels, SharedString, Styled as _, ViewContext,
+    VisualContext as _, WindowContext,
+};
+use util::{paths::SanitizedPath, ResultExt, TryFutureExt};
 use uuid::Uuid;
 pub use workspace_settings::{
     AutosaveSetting, RestoreOnStartupBehavior, TabBarSettings, WorkspaceSettings,
@@ -173,20 +177,6 @@ pub struct ActivatePaneInDirection(pub SplitDirection);
 #[derive(Clone, Deserialize, PartialEq)]
 pub struct SwapPaneInDirection(pub SplitDirection);
 
-#[derive(Clone, Deserialize, PartialEq)]
-pub struct MoveItemToPane {
-    pub destination: usize,
-    #[serde(default = "default_true")]
-    pub focus: bool,
-}
-
-#[derive(Clone, Deserialize, PartialEq)]
-pub struct MoveItemToPaneInDirection {
-    pub direction: SplitDirection,
-    #[serde(default = "default_true")]
-    pub focus: bool,
-}
-
 #[derive(Clone, PartialEq, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveAll {
@@ -236,8 +226,6 @@ impl_actions!(
         ActivatePaneInDirection,
         CloseAllItemsAndPanes,
         CloseInactiveTabsAndPanes,
-        MoveItemToPane,
-        MoveItemToPaneInDirection,
         OpenTerminal,
         Reload,
         Save,
@@ -609,6 +597,7 @@ impl AppState {
         use node_runtime::NodeRuntime;
         use session::Session;
         use settings::SettingsStore;
+        use ui::Context as _;
 
         if !cx.has_global::<SettingsStore>() {
             let settings_store = SettingsStore::test(cx);
@@ -702,9 +691,7 @@ pub enum Event {
     },
     ContactRequestedJoin(u64),
     WorkspaceCreated(WeakView<Workspace>),
-    SpawnTask {
-        action: Box<SpawnInTerminal>,
-    },
+    SpawnTask(Box<SpawnInTerminal>),
     OpenBundledFile {
         text: Cow<'static, str>,
         title: &'static str,
@@ -995,7 +982,7 @@ impl Workspace {
                     this.update(&mut cx, |this, cx| {
                         if let Some(display) = cx.display() {
                             if let Ok(display_uuid) = display.uuid() {
-                                let window_bounds = cx.inner_window_bounds();
+                                let window_bounds = cx.window_bounds();
                                 if let Some(database_id) = workspace_id {
                                     cx.background_executor()
                                         .spawn(DB.set_window_open_status(
@@ -1667,7 +1654,7 @@ impl Workspace {
         F: 'static + FnOnce(&mut Workspace, &mut ViewContext<Workspace>) -> T,
     {
         if self.project.read(cx).is_local() {
-            Task::ready(Ok(callback(self, cx)))
+            Task::Ready(Some(Ok(callback(self, cx))))
         } else {
             let env = self.project.read(cx).cli_environment(cx);
             let task = Self::new_local(Vec::new(), self.app_state.clone(), None, env, cx);
@@ -2845,13 +2832,6 @@ impl Workspace {
         }
     }
 
-    fn move_item_to_pane_at_index(&mut self, action: &MoveItemToPane, cx: &mut ViewContext<Self>) {
-        let Some(&target_pane) = self.center.panes().get(action.destination) else {
-            return;
-        };
-        move_active_item(&self.active_pane, target_pane, action.focus, true, cx);
-    }
-
     pub fn activate_next_pane(&mut self, cx: &mut WindowContext) {
         let panes = self.center.panes();
         if let Some(ix) = panes.iter().position(|pane| **pane == self.active_pane) {
@@ -2960,25 +2940,13 @@ impl Workspace {
         match target {
             Some(ActivateInDirectionTarget::Pane(pane)) => cx.focus_view(&pane),
             Some(ActivateInDirectionTarget::Dock(dock)) => {
-                dock.update(cx, |dock, cx| {
-                    if let Some(panel) = dock.active_panel() {
-                        panel.focus_handle(cx).focus(cx);
-                    } else {
-                        log::error!("Could not find a focus target when in switching focus in {direction} direction for a {:?} dock", dock.position());
-                    }
-                });
+                if let Some(panel) = dock.read(cx).active_panel() {
+                    panel.focus_handle(cx).focus(cx);
+                } else {
+                    log::error!("Could not find a focus target when in switching focus in {direction} direction for a {:?} dock", dock.read(cx).position());
+                }
             }
             None => {}
-        }
-    }
-
-    pub fn move_item_to_pane_in_direction(
-        &mut self,
-        action: &MoveItemToPaneInDirection,
-        cx: &mut WindowContext,
-    ) {
-        if let Some(destination) = self.find_pane_in_direction(action.direction, cx) {
-            move_active_item(&self.active_pane, &destination, action.focus, true, cx);
         }
     }
 
@@ -3002,14 +2970,14 @@ impl Workspace {
         cx: &mut ViewContext<Self>,
     ) {
         if let Some(to) = self.find_pane_in_direction(direction, cx) {
-            self.center.swap(&self.active_pane, &to);
+            self.center.swap(&self.active_pane.clone(), &to);
             cx.notify();
         }
     }
 
     pub fn resize_pane(&mut self, axis: gpui::Axis, amount: Pixels, cx: &mut ViewContext<Self>) {
         self.center
-            .resize(&self.active_pane, axis, amount, &self.bounds);
+            .resize(&self.active_pane.clone(), axis, amount, &self.bounds);
         cx.notify();
     }
 
@@ -4443,7 +4411,6 @@ impl Workspace {
             .on_action(cx.listener(Self::follow_next_collaborator))
             .on_action(cx.listener(Self::close_window))
             .on_action(cx.listener(Self::activate_pane_at_index))
-            .on_action(cx.listener(Self::move_item_to_pane_at_index))
             .on_action(cx.listener(|workspace, _: &Unfollow, cx| {
                 let pane = workspace.active_pane().clone();
                 workspace.unfollow_in_pane(&pane, cx);
@@ -4472,11 +4439,6 @@ impl Workspace {
             .on_action(
                 cx.listener(|workspace, action: &ActivatePaneInDirection, cx| {
                     workspace.activate_pane_in_direction(action.0, cx)
-                }),
-            )
-            .on_action(
-                cx.listener(|workspace, action: &MoveItemToPaneInDirection, cx| {
-                    workspace.move_item_to_pane_in_direction(action, cx)
                 }),
             )
             .on_action(cx.listener(|workspace, action: &SwapPaneInDirection, cx| {
@@ -6222,34 +6184,6 @@ pub fn move_item(
     });
 }
 
-pub fn move_active_item(
-    source: &View<Pane>,
-    destination: &View<Pane>,
-    focus_destination: bool,
-    close_if_empty: bool,
-    cx: &mut WindowContext<'_>,
-) {
-    if source == destination {
-        return;
-    }
-    let Some(active_item) = source.read(cx).active_item() else {
-        return;
-    };
-    source.update(cx, |source_pane, cx| {
-        let item_id = active_item.item_id();
-        source_pane.remove_item(item_id, false, close_if_empty, cx);
-        destination.update(cx, |target_pane, cx| {
-            target_pane.add_item(
-                active_item,
-                focus_destination,
-                focus_destination,
-                Some(target_pane.items_len()),
-                cx,
-            );
-        });
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use std::{cell::RefCell, rc::Rc};
@@ -7922,7 +7856,7 @@ mod tests {
     }
 
     mod register_project_item_tests {
-        use gpui::Context as _;
+        use ui::Context as _;
 
         use super::*;
 

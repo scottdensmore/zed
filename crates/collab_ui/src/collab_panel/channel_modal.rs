@@ -89,15 +89,15 @@ impl ChannelModal {
         cx.notify()
     }
 
-    fn set_channel_visibility(&mut self, selection: &ToggleState, cx: &mut ViewContext<Self>) {
+    fn set_channel_visibility(&mut self, selection: &Selection, cx: &mut ViewContext<Self>) {
         self.channel_store.update(cx, |channel_store, cx| {
             channel_store
                 .set_channel_visibility(
                     self.channel_id,
                     match selection {
-                        ToggleState::Unselected => ChannelVisibility::Members,
-                        ToggleState::Selected => ChannelVisibility::Public,
-                        ToggleState::Indeterminate => return,
+                        Selection::Unselected => ChannelVisibility::Members,
+                        Selection::Selected => ChannelVisibility::Public,
+                        Selection::Indeterminate => return,
                     },
                     cx,
                 )
@@ -159,9 +159,9 @@ impl Render for ChannelModal {
                                 "is-public",
                                 Label::new("Public").size(LabelSize::Small),
                                 if visibility == ChannelVisibility::Public {
-                                    ui::ToggleState::Selected
+                                    ui::Selection::Selected
                                 } else {
-                                    ui::ToggleState::Unselected
+                                    ui::Selection::Unselected
                                 },
                                 cx.listener(Self::set_channel_visibility),
                             ))
@@ -272,7 +272,11 @@ impl PickerDelegate for ChannelModalDelegate {
                     self.match_candidates.clear();
                     self.match_candidates
                         .extend(self.members.iter().enumerate().map(|(id, member)| {
-                            StringMatchCandidate::new(id, &member.user.github_login)
+                            StringMatchCandidate {
+                                id,
+                                string: member.user.github_login.clone(),
+                                char_bag: member.user.github_login.chars().collect(),
+                            }
                         }));
 
                     let matches = cx.background_executor().block(match_strings(
@@ -382,7 +386,7 @@ impl PickerDelegate for ChannelModalDelegate {
             ListItem::new(ix)
                 .inset(true)
                 .spacing(ListItemSpacing::Sparse)
-                .toggle_state(selected)
+                .selected(selected)
                 .start_slot(Avatar::new(user.avatar_uri.clone()))
                 .child(Label::new(user.github_login.clone()))
                 .end_slot(h_flex().gap_2().map(|slot| {
@@ -409,7 +413,7 @@ impl PickerDelegate for ChannelModalDelegate {
                                     Some(
                                         deferred(
                                             anchored()
-                                                .anchor(gpui::Corner::TopRight)
+                                                .anchor(gpui::AnchorCorner::TopRight)
                                                 .child(menu.clone()),
                                         )
                                         .with_priority(1),

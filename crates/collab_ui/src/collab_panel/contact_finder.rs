@@ -151,7 +151,7 @@ impl PickerDelegate for ContactFinderDelegate {
             ListItem::new(ix)
                 .inset(true)
                 .spacing(ListItemSpacing::Sparse)
-                .toggle_state(selected)
+                .selected(selected)
                 .start_slot(Avatar::new(user.avatar_uri.clone()))
                 .child(Label::new(user.github_login.clone()))
                 .end_slot::<Icon>(icon_path.map(Icon::from_path)),

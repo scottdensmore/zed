@@ -251,7 +251,6 @@ gpui::actions!(
         DisplayCursorNames,
         DuplicateLineDown,
         DuplicateLineUp,
-        DuplicateSelection,
         ExpandAllHunkDiffs,
         ExpandMacroRecursively,
         FindAllReferences,

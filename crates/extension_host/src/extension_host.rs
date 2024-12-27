@@ -1001,13 +1001,14 @@ impl ExtensionStore {
             extensions_to_unload.len() - reload_count
         );
 
-        for extension_id in &extensions_to_load {
-            if let Some(extension) = new_index.extensions.get(extension_id) {
-                telemetry::event!(
-                    "Extension Loaded",
-                    extension_id,
-                    version = extension.manifest.version
-                );
+        if let Some(telemetry) = &self.telemetry {
+            for extension_id in &extensions_to_load {
+                if let Some(extension) = new_index.extensions.get(extension_id) {
+                    telemetry.report_extension_event(
+                        extension_id.clone(),
+                        extension.manifest.version.clone(),
+                    );
+                }
             }
         }
 

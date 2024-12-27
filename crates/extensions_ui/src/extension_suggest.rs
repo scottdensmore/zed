@@ -19,7 +19,6 @@ const SUGGESTIONS_BY_EXTENSION_ID: &[(&str, &[&str])] = &[
     ("clojure", &["bb", "clj", "cljc", "cljs", "edn"]),
     ("neocmake", &["CMakeLists.txt", "cmake"]),
     ("csharp", &["cs"]),
-    ("cython", &["pyx", "pxd", "pxi"]),
     ("dart", &["dart"]),
     ("dockerfile", &["Dockerfile"]),
     ("elisp", &["el"]),

@@ -1,6 +1,4 @@
-use gpui::{
-    div, prelude::*, px, size, App, AppContext, Bounds, ViewContext, WindowBounds, WindowOptions,
-};
+use gpui::*;
 
 struct HelloWorld {}
 

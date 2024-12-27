@@ -3,17 +3,18 @@
 use std::{cell::RefCell, rc::Rc};
 
 use gpui::{
-    anchored, deferred, div, px, AnyElement, Bounds, Corner, DismissEvent, DispatchPhase, Element,
-    ElementId, GlobalElementId, Hitbox, InteractiveElement, IntoElement, LayoutId, ManagedView,
-    MouseButton, MouseDownEvent, ParentElement, Pixels, Point, View, VisualContext, WindowContext,
+    anchored, deferred, div, px, AnchorCorner, AnyElement, Bounds, DismissEvent, DispatchPhase,
+    Element, ElementId, GlobalElementId, Hitbox, InteractiveElement, IntoElement, LayoutId,
+    ManagedView, MouseButton, MouseDownEvent, ParentElement, Pixels, Point, View, VisualContext,
+    WindowContext,
 };
 
 pub struct RightClickMenu<M: ManagedView> {
     id: ElementId,
     child_builder: Option<Box<dyn FnOnce(bool) -> AnyElement + 'static>>,
     menu_builder: Option<Rc<dyn Fn(&mut WindowContext) -> View<M> + 'static>>,
-    anchor: Option<Corner>,
-    attach: Option<Corner>,
+    anchor: Option<AnchorCorner>,
+    attach: Option<AnchorCorner>,
 }
 
 impl<M: ManagedView> RightClickMenu<M> {
@@ -29,13 +30,13 @@ impl<M: ManagedView> RightClickMenu<M> {
 
     /// anchor defines which corner of the menu to anchor to the attachment point
     /// (by default the cursor position, but see attach)
-    pub fn anchor(mut self, anchor: Corner) -> Self {
+    pub fn anchor(mut self, anchor: AnchorCorner) -> Self {
         self.anchor = Some(anchor);
         self
     }
 
     /// attach defines which corner of the handle to attach the menu's anchor to
-    pub fn attach(mut self, attach: Corner) -> Self {
+    pub fn attach(mut self, attach: AnchorCorner) -> Self {
         self.attach = Some(attach);
         self
     }
@@ -237,7 +238,7 @@ impl<M: ManagedView> Element for RightClickMenu<M> {
                     *menu.borrow_mut() = Some(new_menu);
                     *position.borrow_mut() = if let Some(child_bounds) = child_bounds {
                         if let Some(attach) = attach {
-                            child_bounds.corner(attach)
+                            attach.corner(child_bounds)
                         } else {
                             cx.mouse_position()
                         }

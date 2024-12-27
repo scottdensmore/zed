@@ -73,8 +73,8 @@ impl ListHeader {
     }
 }
 
-impl Toggleable for ListHeader {
-    fn toggle_state(mut self, selected: bool) -> Self {
+impl Selectable for ListHeader {
+    fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
     }

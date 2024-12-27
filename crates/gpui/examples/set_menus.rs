@@ -1,6 +1,4 @@
-use gpui::{
-    actions, div, prelude::*, rgb, App, AppContext, Menu, MenuItem, ViewContext, WindowOptions,
-};
+use gpui::*;
 
 struct SetMenus;
 

@@ -273,9 +273,9 @@ impl Render for WelcomePage {
                                         "enable-vim",
                                         Label::new("Enable Vim Mode"),
                                         if VimModeSetting::get_global(cx).0 {
-                                            ui::ToggleState::Selected
+                                            ui::Selection::Selected
                                         } else {
-                                            ui::ToggleState::Unselected
+                                            ui::Selection::Unselected
                                         },
                                         cx.listener(move |this, selection, cx| {
                                             this.telemetry
@@ -298,19 +298,24 @@ impl Render for WelcomePage {
                                 "enable-crash",
                                 Label::new("Send Crash Reports"),
                                 if TelemetrySettings::get_global(cx).diagnostics {
-                                    ui::ToggleState::Selected
+                                    ui::Selection::Selected
                                 } else {
-                                    ui::ToggleState::Unselected
+                                    ui::Selection::Unselected
                                 },
                                 cx.listener(move |this, selection, cx| {
                                     this.telemetry.report_app_event(
                                         "welcome page: toggle diagnostic telemetry".to_string(),
                                     );
                                     this.update_settings::<TelemetrySettings>(selection, cx, {
+                                        let telemetry = this.telemetry.clone();
+
                                         move |settings, value| {
                                             settings.diagnostics = Some(value);
 
-                                            telemetry::event!("Settings Changed", setting = "diagnostic telemetry", value);
+                                            telemetry.report_setting_event(
+                                                "diagnostic telemetry",
+                                                value.to_string(),
+                                            );
                                         }
                                     });
                                 }),
@@ -319,18 +324,24 @@ impl Render for WelcomePage {
                                 "enable-telemetry",
                                 Label::new("Send Telemetry"),
                                 if TelemetrySettings::get_global(cx).metrics {
-                                    ui::ToggleState::Selected
+                                    ui::Selection::Selected
                                 } else {
-                                    ui::ToggleState::Unselected
+                                    ui::Selection::Unselected
                                 },
                                 cx.listener(move |this, selection, cx| {
                                     this.telemetry.report_app_event(
                                         "welcome page: toggle metric telemetry".to_string(),
                                     );
                                     this.update_settings::<TelemetrySettings>(selection, cx, {
+                                        let telemetry = this.telemetry.clone();
+
                                         move |settings, value| {
                                             settings.metrics = Some(value);
-                                            telemetry::event!("Settings Changed", setting = "metric telemetry", value);
+
+                                            telemetry.report_setting_event(
+                                                "metric telemetry",
+                                                value.to_string(),
+                                            );
                                         }
                                     });
                                 }),
@@ -370,7 +381,7 @@ impl WelcomePage {
 
     fn update_settings<T: Settings>(
         &mut self,
-        selection: &ToggleState,
+        selection: &Selection,
         cx: &mut ViewContext<Self>,
         callback: impl 'static + Send + Fn(&mut T::FileContent, bool),
     ) {
@@ -379,8 +390,8 @@ impl WelcomePage {
             let selection = *selection;
             settings::update_settings_file::<T>(fs, cx, move |settings, _| {
                 let value = match selection {
-                    ToggleState::Unselected => false,
-                    ToggleState::Selected => true,
+                    Selection::Unselected => false,
+                    Selection::Selected => true,
                     _ => return,
                 };
 

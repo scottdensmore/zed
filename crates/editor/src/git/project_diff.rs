@@ -22,7 +22,10 @@ use multi_buffer::{ExcerptId, ExcerptRange, ExpandExcerptDirection, MultiBuffer}
 use project::{Project, ProjectEntryId, ProjectPath, WorktreeId};
 use text::{OffsetRangeExt, ToPoint};
 use theme::ActiveTheme;
-use ui::prelude::*;
+use ui::{
+    div, h_flex, Color, Context, FluentBuilder, Icon, IconName, IntoElement, Label, LabelCommon,
+    ParentElement, SharedString, Styled, ViewContext, VisualContext, WindowContext,
+};
 use util::{paths::compare_paths, ResultExt};
 use workspace::{
     item::{BreadcrumbText, Item, ItemEvent, ItemHandle, TabContentParams},

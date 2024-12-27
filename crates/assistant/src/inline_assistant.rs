@@ -33,7 +33,7 @@ use language_model::{
     LanguageModel, LanguageModelRegistry, LanguageModelRequest, LanguageModelRequestMessage,
     LanguageModelTextStream, Role,
 };
-use language_model_selector::{LanguageModelSelector, LanguageModelSelectorPopoverMenu};
+use language_model_selector::LanguageModelSelector;
 use language_models::report_assistant_event;
 use multi_buffer::MultiBufferRow;
 use parking_lot::Mutex;
@@ -47,7 +47,6 @@ use std::{
     iter, mem,
     ops::{Range, RangeInclusive},
     pin::Pin,
-    rc::Rc,
     sync::Arc,
     task::{self, Poll},
     time::{Duration, Instant},
@@ -175,7 +174,7 @@ impl InlineAssistant {
         if let Some(editor) = item.act_as::<Editor>(cx) {
             editor.update(cx, |editor, cx| {
                 editor.push_code_action_provider(
-                    Rc::new(AssistantCodeActionProvider {
+                    Arc::new(AssistantCodeActionProvider {
                         editor: cx.view().downgrade(),
                         workspace: workspace.downgrade(),
                     }),
@@ -1359,8 +1358,8 @@ enum PromptEditorEvent {
 
 struct PromptEditor {
     id: InlineAssistId,
+    fs: Arc<dyn Fs>,
     editor: View<Editor>,
-    language_model_selector: View<LanguageModelSelector>,
     edited_since_done: bool,
     gutter_dimensions: Arc<Mutex<GutterDimensions>>,
     prompt_history: VecDeque<String>,
@@ -1442,15 +1441,6 @@ impl Render for PromptEditor {
                 ]
             }
             CodegenStatus::Error(_) | CodegenStatus::Done => {
-                let must_rerun =
-                    self.edited_since_done || matches!(status, CodegenStatus::Error(_));
-                // when accept button isn't visible, then restart maps to confirm
-                // when accept button is visible, then restart must be mapped to an alternate keyboard shortcut
-                let restart_key: &dyn gpui::Action = if must_rerun {
-                    &menu::Confirm
-                } else {
-                    &menu::Restart
-                };
                 vec![
                     IconButton::new("cancel", IconName::Close)
                         .icon_color(Color::Muted)
@@ -1460,22 +1450,23 @@ impl Render for PromptEditor {
                             cx.listener(|_, _, cx| cx.emit(PromptEditorEvent::CancelRequested)),
                         )
                         .into_any_element(),
-                    IconButton::new("restart", IconName::RotateCw)
-                        .icon_color(Color::Muted)
-                        .shape(IconButtonShape::Square)
-                        .tooltip(|cx| {
-                            Tooltip::with_meta(
-                                "Regenerate Transformation",
-                                Some(restart_key),
-                                "Current change will be discarded",
-                                cx,
-                            )
-                        })
-                        .on_click(cx.listener(|_, _, cx| {
-                            cx.emit(PromptEditorEvent::StartRequested);
-                        }))
-                        .into_any_element(),
-                    if !must_rerun {
+                    if self.edited_since_done || matches!(status, CodegenStatus::Error(_)) {
+                        IconButton::new("restart", IconName::RotateCw)
+                            .icon_color(Color::Info)
+                            .shape(IconButtonShape::Square)
+                            .tooltip(|cx| {
+                                Tooltip::with_meta(
+                                    "Restart Transformation",
+                                    Some(&menu::Confirm),
+                                    "Changes will be discarded",
+                                    cx,
+                                )
+                            })
+                            .on_click(cx.listener(|_, _, cx| {
+                                cx.emit(PromptEditorEvent::StartRequested);
+                            }))
+                            .into_any_element()
+                    } else {
                         IconButton::new("confirm", IconName::Check)
                             .icon_color(Color::Info)
                             .shape(IconButtonShape::Square)
@@ -1484,8 +1475,6 @@ impl Render for PromptEditor {
                                 cx.emit(PromptEditorEvent::ConfirmRequested);
                             }))
                             .into_any_element()
-                    } else {
-                        div().into_any_element()
                     },
                 ]
             }
@@ -1502,7 +1491,6 @@ impl Render for PromptEditor {
             .py(cx.line_height() / 2.5)
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::cancel))
-            .on_action(cx.listener(Self::restart))
             .on_action(cx.listener(Self::move_up))
             .on_action(cx.listener(Self::move_down))
             .capture_action(cx.listener(Self::cycle_prev))
@@ -1512,27 +1500,43 @@ impl Render for PromptEditor {
                     .w(gutter_dimensions.full_width() + (gutter_dimensions.margin / 2.0))
                     .justify_center()
                     .gap_2()
-                    .child(LanguageModelSelectorPopoverMenu::new(
-                        self.language_model_selector.clone(),
-                        IconButton::new("context", IconName::SettingsAlt)
-                            .shape(IconButtonShape::Square)
-                            .icon_size(IconSize::Small)
-                            .icon_color(Color::Muted)
-                            .tooltip(move |cx| {
-                                Tooltip::with_meta(
-                                    format!(
-                                        "Using {}",
-                                        LanguageModelRegistry::read_global(cx)
-                                            .active_model()
-                                            .map(|model| model.name().0)
-                                            .unwrap_or_else(|| "No model selected".into()),
-                                    ),
-                                    None,
-                                    "Change Model",
-                                    cx,
-                                )
-                            }),
-                    ))
+                    .child(
+                        LanguageModelSelector::new(
+                            {
+                                let fs = self.fs.clone();
+                                move |model, cx| {
+                                    update_settings_file::<AssistantSettings>(
+                                        fs.clone(),
+                                        cx,
+                                        move |settings, _| settings.set_model(model.clone()),
+                                    );
+                                }
+                            },
+                            IconButton::new("context", IconName::SettingsAlt)
+                                .shape(IconButtonShape::Square)
+                                .icon_size(IconSize::Small)
+                                .icon_color(Color::Muted)
+                                .tooltip(move |cx| {
+                                    Tooltip::with_meta(
+                                        format!(
+                                            "Using {}",
+                                            LanguageModelRegistry::read_global(cx)
+                                                .active_model()
+                                                .map(|model| model.name().0)
+                                                .unwrap_or_else(|| "No model selected".into()),
+                                        ),
+                                        None,
+                                        "Change Model",
+                                        cx,
+                                    )
+                                }),
+                        )
+                        .info_text(
+                            "Inline edits use context\n\
+                            from the currently selected\n\
+                            assistant panel tab.",
+                        ),
+                    )
                     .map(|el| {
                         let CodegenStatus::Error(error) = self.codegen.read(cx).status(cx) else {
                             return el;
@@ -1546,7 +1550,7 @@ impl Render for PromptEditor {
                                 v_flex()
                                     .child(
                                         IconButton::new("rate-limit-error", IconName::XCircle)
-                                            .toggle_state(self.show_rate_limit_notice)
+                                            .selected(self.show_rate_limit_notice)
                                             .shape(IconButtonShape::Square)
                                             .icon_size(IconSize::Small)
                                             .on_click(cx.listener(Self::toggle_rate_limit_notice)),
@@ -1556,7 +1560,7 @@ impl Render for PromptEditor {
                                             anchored()
                                                 .position_mode(gpui::AnchoredPositionMode::Local)
                                                 .position(point(px(0.), px(24.)))
-                                                .anchor(gpui::Corner::TopLeft)
+                                                .anchor(gpui::AnchorCorner::TopLeft)
                                                 .child(self.render_rate_limit_notice(cx)),
                                         )
                                     })),
@@ -1638,19 +1642,6 @@ impl PromptEditor {
         let mut this = Self {
             id,
             editor: prompt_editor,
-            language_model_selector: cx.new_view(|cx| {
-                let fs = fs.clone();
-                LanguageModelSelector::new(
-                    move |model, cx| {
-                        update_settings_file::<AssistantSettings>(
-                            fs.clone(),
-                            cx,
-                            move |settings, _| settings.set_model(model.clone()),
-                        );
-                    },
-                    cx,
-                )
-            }),
             edited_since_done: false,
             gutter_dimensions,
             prompt_history,
@@ -1659,6 +1650,7 @@ impl PromptEditor {
             _codegen_subscription: cx.observe(&codegen, Self::handle_codegen_changed),
             editor_subscriptions: Vec::new(),
             codegen,
+            fs,
             pending_token_count: Task::ready(Ok(())),
             token_counts: None,
             _token_count_subscriptions: token_count_subscriptions,
@@ -1847,10 +1839,6 @@ impl PromptEditor {
                     .update(cx, |editor, _| editor.set_read_only(false));
             }
         }
-    }
-
-    fn restart(&mut self, _: &menu::Restart, cx: &mut ViewContext<Self>) {
-        cx.emit(PromptEditorEvent::StartRequested);
     }
 
     fn cancel(&mut self, _: &editor::actions::Cancel, cx: &mut ViewContext<Self>) {
@@ -2149,15 +2137,15 @@ impl PromptEditor {
                             "dont-show-again",
                             Label::new("Don't show again"),
                             if dismissed_rate_limit_notice() {
-                                ui::ToggleState::Selected
+                                ui::Selection::Selected
                             } else {
-                                ui::ToggleState::Unselected
+                                ui::Selection::Unselected
                             },
                             |selection, cx| {
                                 let is_dismissed = match selection {
-                                    ui::ToggleState::Unselected => false,
-                                    ui::ToggleState::Indeterminate => return,
-                                    ui::ToggleState::Selected => true,
+                                    ui::Selection::Unselected => false,
+                                    ui::Selection::Indeterminate => return,
+                                    ui::Selection::Selected => true,
                                 };
 
                                 set_rate_limit_notice_dismissed(is_dismissed, cx)

@@ -117,48 +117,30 @@ impl LspAdapter for PythonLspAdapter {
         let latest_version = latest_version.downcast::<String>().unwrap();
         let server_path = container_dir.join(SERVER_PATH);
 
-        self.node
-            .npm_install_packages(
-                &container_dir,
-                &[(Self::SERVER_NAME.as_ref(), latest_version.as_str())],
-            )
-            .await?;
-
-        Ok(LanguageServerBinary {
-            path: self.node.binary_path().await?,
-            env: None,
-            arguments: server_binary_arguments(&server_path),
-        })
-    }
-
-    async fn check_if_version_installed(
-        &self,
-        version: &(dyn 'static + Send + Any),
-        container_dir: &PathBuf,
-        _: &dyn LspAdapterDelegate,
-    ) -> Option<LanguageServerBinary> {
-        let version = version.downcast_ref::<String>().unwrap();
-        let server_path = container_dir.join(SERVER_PATH);
-
         let should_install_language_server = self
             .node
             .should_install_npm_package(
                 Self::SERVER_NAME.as_ref(),
                 &server_path,
                 &container_dir,
-                &version,
+                &latest_version,
             )
             .await;
 
         if should_install_language_server {
-            None
-        } else {
-            Some(LanguageServerBinary {
-                path: self.node.binary_path().await.ok()?,
-                env: None,
-                arguments: server_binary_arguments(&server_path),
-            })
+            self.node
+                .npm_install_packages(
+                    &container_dir,
+                    &[(Self::SERVER_NAME.as_ref(), latest_version.as_str())],
+                )
+                .await?;
         }
+
+        Ok(LanguageServerBinary {
+            path: self.node.binary_path().await?,
+            env: None,
+            arguments: server_binary_arguments(&server_path),
+        })
     }
 
     async fn cached_server_binary(
@@ -333,10 +315,7 @@ impl ContextProvider for PythonContextProvider {
                 toolchains
                     .active_toolchain(worktree_id, "Python".into(), &mut cx)
                     .await
-                    .map_or_else(
-                        || "python3".to_owned(),
-                        |toolchain| format!("\"{}\"", toolchain.path),
-                    )
+                    .map_or_else(|| "python3".to_owned(), |toolchain| toolchain.path.into())
             } else {
                 String::from("python3")
             };
@@ -357,17 +336,14 @@ impl ContextProvider for PythonContextProvider {
             TaskTemplate {
                 label: "execute selection".to_owned(),
                 command: PYTHON_ACTIVE_TOOLCHAIN_PATH.template_value(),
-                args: vec![
-                    "-c".to_owned(),
-                    VariableName::SelectedText.template_value_with_whitespace(),
-                ],
+                args: vec!["-c".to_owned(), VariableName::SelectedText.template_value()],
                 ..TaskTemplate::default()
             },
             // Execute an entire file
             TaskTemplate {
                 label: format!("run '{}'", VariableName::File.template_value()),
                 command: PYTHON_ACTIVE_TOOLCHAIN_PATH.template_value(),
-                args: vec![VariableName::File.template_value_with_whitespace()],
+                args: vec![VariableName::File.template_value()],
                 ..TaskTemplate::default()
             },
         ];
@@ -382,7 +358,7 @@ impl ContextProvider for PythonContextProvider {
                         args: vec![
                             "-m".to_owned(),
                             "unittest".to_owned(),
-                            VariableName::File.template_value_with_whitespace(),
+                            VariableName::File.template_value(),
                         ],
                         ..TaskTemplate::default()
                     },
@@ -393,7 +369,7 @@ impl ContextProvider for PythonContextProvider {
                         args: vec![
                             "-m".to_owned(),
                             "unittest".to_owned(),
-                            PYTHON_TEST_TARGET_TASK_VARIABLE.template_value_with_whitespace(),
+                            "$ZED_CUSTOM_PYTHON_TEST_TARGET".to_owned(),
                         ],
                         tags: vec![
                             "python-unittest-class".to_owned(),
@@ -412,7 +388,7 @@ impl ContextProvider for PythonContextProvider {
                         args: vec![
                             "-m".to_owned(),
                             "pytest".to_owned(),
-                            VariableName::File.template_value_with_whitespace(),
+                            VariableName::File.template_value(),
                         ],
                         ..TaskTemplate::default()
                     },
@@ -423,7 +399,7 @@ impl ContextProvider for PythonContextProvider {
                         args: vec![
                             "-m".to_owned(),
                             "pytest".to_owned(),
-                            PYTHON_TEST_TARGET_TASK_VARIABLE.template_value_with_whitespace(),
+                            "$ZED_CUSTOM_PYTHON_TEST_TARGET".to_owned(),
                         ],
                         tags: vec![
                             "python-pytest-class".to_owned(),

@@ -1,8 +1,4 @@
-use gpui::{
-    div, point, prelude::*, px, rgb, App, AppContext, Bounds, DisplayId, Hsla, Pixels,
-    SharedString, Size, ViewContext, WindowBackgroundAppearance, WindowBounds, WindowKind,
-    WindowOptions,
-};
+use gpui::*;
 
 struct WindowContent {
     text: SharedString,
@@ -90,7 +86,7 @@ fn main() {
             .unwrap();
 
             let bounds = Bounds {
-                origin: screen.bounds().top_right()
+                origin: screen.bounds().upper_right()
                     - point(size.width + margin_offset, -margin_offset),
                 size,
             };
@@ -105,7 +101,7 @@ fn main() {
             .unwrap();
 
             let bounds = Bounds {
-                origin: screen.bounds().bottom_left()
+                origin: screen.bounds().lower_left()
                     - point(-margin_offset, size.height + margin_offset),
                 size,
             };
@@ -120,7 +116,7 @@ fn main() {
             .unwrap();
 
             let bounds = Bounds {
-                origin: screen.bounds().bottom_right()
+                origin: screen.bounds().lower_right()
                     - point(size.width + margin_offset, size.height + margin_offset),
                 size,
             };

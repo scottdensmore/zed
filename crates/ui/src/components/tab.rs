@@ -91,8 +91,8 @@ impl InteractiveElement for Tab {
 
 impl StatefulInteractiveElement for Tab {}
 
-impl Toggleable for Tab {
-    fn toggle_state(mut self, selected: bool) -> Self {
+impl Selectable for Tab {
+    fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
     }

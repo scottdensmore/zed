@@ -28,12 +28,11 @@ use windows::{
     UI::ViewManagement::UISettings,
 };
 
-use crate::{platform::blade::BladeContext, *};
+use crate::*;
 
 pub(crate) struct WindowsPlatform {
     state: RefCell<WindowsPlatformState>,
     raw_window_handles: RwLock<SmallVec<[HWND; 4]>>,
-    gpu_context: BladeContext,
     // The below members will never change throughout the entire lifecycle of the app.
     icon: HICON,
     main_receiver: flume::Receiver<Runnable>,
@@ -48,7 +47,6 @@ pub(crate) struct WindowsPlatform {
 
 pub(crate) struct WindowsPlatformState {
     callbacks: PlatformCallbacks,
-    menus: Vec<OwnedMenu>,
     // NOTE: standard cursor handles don't need to close.
     pub(crate) current_cursor: HCURSOR,
 }
@@ -71,7 +69,6 @@ impl WindowsPlatformState {
         Self {
             callbacks,
             current_cursor,
-            menus: Vec::new(),
         }
     }
 }
@@ -97,14 +94,12 @@ impl WindowsPlatform {
         let icon = load_icon().unwrap_or_default();
         let state = RefCell::new(WindowsPlatformState::new());
         let raw_window_handles = RwLock::new(SmallVec::new());
-        let gpu_context = BladeContext::new().expect("Unable to init GPU context");
         let windows_version = WindowsVersion::new().expect("Error retrieve windows version");
         let validation_number = rand::random::<usize>();
 
         Self {
             state,
             raw_window_handles,
-            gpu_context,
             icon,
             main_receiver,
             dispatch_event,
@@ -349,12 +344,7 @@ impl Platform for WindowsPlatform {
         handle: AnyWindowHandle,
         options: WindowParams,
     ) -> Result<Box<dyn PlatformWindow>> {
-        let window = WindowsWindow::new(
-            handle,
-            options,
-            self.generate_creation_info(),
-            &self.gpu_context,
-        )?;
+        let window = WindowsWindow::new(handle, options, self.generate_creation_info())?;
         let handle = window.get_raw_handle();
         self.raw_window_handles.write().push(handle);
 
@@ -451,15 +441,8 @@ impl Platform for WindowsPlatform {
         self.state.borrow_mut().callbacks.reopen = Some(callback);
     }
 
-    fn set_menus(&self, menus: Vec<Menu>, _keymap: &Keymap) {
-        self.state.borrow_mut().menus = menus.into_iter().map(|menu| menu.owned()).collect();
-    }
-
-    fn get_menus(&self) -> Option<Vec<OwnedMenu>> {
-        Some(self.state.borrow().menus.clone())
-    }
-
     // todo(windows)
+    fn set_menus(&self, _menus: Vec<Menu>, _keymap: &Keymap) {}
     fn set_dock_menu(&self, _menus: Vec<MenuItem>, _keymap: &Keymap) {}
 
     fn on_app_menu_action(&self, callback: Box<dyn FnMut(&dyn Action)>) {

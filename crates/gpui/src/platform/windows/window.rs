@@ -27,7 +27,7 @@ use windows::{
     },
 };
 
-use crate::platform::blade::{BladeContext, BladeRenderer};
+use crate::platform::blade::BladeRenderer;
 use crate::*;
 
 pub(crate) struct WindowsWindow(pub Rc<WindowsWindowStatePtr>);
@@ -38,7 +38,7 @@ pub struct WindowsWindowState {
     pub fullscreen_restore_bounds: Bounds<Pixels>,
     pub border_offset: WindowBorderOffset,
     pub scale_factor: f32,
-    pub restore_from_minimized: Option<Box<dyn FnMut(RequestFrameOptions)>>,
+    pub is_minimized: Option<bool>,
 
     pub callbacks: Callbacks,
     pub input_handler: Option<PlatformInputHandler>,
@@ -78,7 +78,6 @@ impl WindowsWindowState {
         cs: &CREATESTRUCTW,
         current_cursor: HCURSOR,
         display: WindowsDisplay,
-        gpu_context: &BladeContext,
     ) -> Result<Self> {
         let scale_factor = {
             let monitor_dpi = unsafe { GetDpiForWindow(hwnd) } as f32;
@@ -94,8 +93,8 @@ impl WindowsWindowState {
             size: logical_size,
         };
         let border_offset = WindowBorderOffset::default();
-        let restore_from_minimized = None;
-        let renderer = windows_renderer::init(gpu_context, hwnd, transparent)?;
+        let is_minimized = None;
+        let renderer = windows_renderer::windows_renderer(hwnd, transparent)?;
         let callbacks = Callbacks::default();
         let input_handler = None;
         let system_key_handled = false;
@@ -112,7 +111,7 @@ impl WindowsWindowState {
             fullscreen_restore_bounds,
             border_offset,
             scale_factor,
-            restore_from_minimized,
+            is_minimized,
             callbacks,
             input_handler,
             system_key_handled,
@@ -228,7 +227,6 @@ impl WindowsWindowStatePtr {
             cs,
             context.current_cursor,
             context.display,
-            context.gpu_context,
         )?);
 
         Ok(Rc::new_cyclic(|this| Self {
@@ -342,7 +340,7 @@ pub(crate) struct Callbacks {
     pub(crate) appearance_changed: Option<Box<dyn FnMut()>>,
 }
 
-struct WindowCreateContext<'a> {
+struct WindowCreateContext {
     inner: Option<Result<Rc<WindowsWindowStatePtr>>>,
     handle: AnyWindowHandle,
     hide_title_bar: bool,
@@ -354,7 +352,6 @@ struct WindowCreateContext<'a> {
     windows_version: WindowsVersion,
     validation_number: usize,
     main_receiver: flume::Receiver<Runnable>,
-    gpu_context: &'a BladeContext,
 }
 
 impl WindowsWindow {
@@ -362,7 +359,6 @@ impl WindowsWindow {
         handle: AnyWindowHandle,
         params: WindowParams,
         creation_info: WindowCreationInfo,
-        gpu_context: &BladeContext,
     ) -> Result<Self> {
         let WindowCreationInfo {
             icon,
@@ -414,7 +410,6 @@ impl WindowsWindow {
             windows_version,
             validation_number,
             main_receiver,
-            gpu_context,
         };
         let lpparam = Some(&context as *const _ as *const _);
         let creation_result = unsafe {
@@ -775,7 +770,7 @@ impl PlatformWindow for WindowsWindow {
         self.0.hwnd
     }
 
-    fn gpu_specs(&self) -> Option<GpuSpecs> {
+    fn gpu_specs(&self) -> Option<GPUSpecs> {
         Some(self.0.state.borrow().renderer.gpu_specs())
     }
 
@@ -1073,7 +1068,7 @@ unsafe extern "system" fn wnd_proc(
         let weak = Box::new(Rc::downgrade(creation_result.as_ref().unwrap()));
         unsafe { set_window_long(hwnd, GWLP_USERDATA, Box::into_raw(weak) as isize) };
         ctx.inner = Some(creation_result);
-        return unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) };
+        return LRESULT(1);
     }
     let ptr = unsafe { get_window_long(hwnd, GWLP_USERDATA) } as *mut Weak<WindowsWindowStatePtr>;
     if ptr.is_null() {
@@ -1241,24 +1236,38 @@ fn set_window_composition_attribute(hwnd: HWND, color: Option<Color>, state: u32
 }
 
 mod windows_renderer {
-    use crate::platform::blade::{BladeContext, BladeRenderer, BladeSurfaceConfig};
+    use std::{num::NonZeroIsize, sync::Arc};
+
+    use blade_graphics as gpu;
     use raw_window_handle as rwh;
-    use std::num::NonZeroIsize;
     use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::GWLP_HINSTANCE};
 
-    use crate::get_window_long;
+    use crate::{
+        get_window_long,
+        platform::blade::{BladeRenderer, BladeSurfaceConfig},
+    };
 
-    pub(super) fn init(
-        context: &BladeContext,
-        hwnd: HWND,
-        transparent: bool,
-    ) -> anyhow::Result<BladeRenderer> {
+    pub(super) fn windows_renderer(hwnd: HWND, transparent: bool) -> anyhow::Result<BladeRenderer> {
         let raw = RawWindow { hwnd };
+        let gpu: Arc<gpu::Context> = Arc::new(
+            unsafe {
+                gpu::Context::init_windowed(
+                    &raw,
+                    gpu::ContextDesc {
+                        validation: false,
+                        capture: false,
+                        overlay: false,
+                    },
+                )
+            }
+            .map_err(|e| anyhow::anyhow!("{:?}", e))?,
+        );
         let config = BladeSurfaceConfig {
-            size: Default::default(),
+            size: gpu::Extent::default(),
             transparent,
         };
-        BladeRenderer::new(context, &raw, config)
+
+        Ok(BladeRenderer::new(gpu, config))
     }
 
     struct RawWindow {

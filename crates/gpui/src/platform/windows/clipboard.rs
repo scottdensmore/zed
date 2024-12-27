@@ -357,7 +357,7 @@ impl From<ImageFormat> for image::ImageFormat {
             ImageFormat::Jpeg => image::ImageFormat::Jpeg,
             ImageFormat::Webp => image::ImageFormat::WebP,
             ImageFormat::Gif => image::ImageFormat::Gif,
-            // TODO: ImageFormat::Svg
+            // ImageFormat::Svg => todo!(),
             ImageFormat::Bmp => image::ImageFormat::Bmp,
             ImageFormat::Tiff => image::ImageFormat::Tiff,
             _ => unreachable!(),

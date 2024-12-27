@@ -5,10 +5,7 @@ use std::{
     ops::{Deref, DerefMut},
     path::{Path, PathBuf},
     rc::{Rc, Weak},
-    sync::{
-        atomic::{AtomicUsize, Ordering::SeqCst},
-        Arc,
-    },
+    sync::{atomic::Ordering::SeqCst, Arc},
     time::Duration,
 };
 
@@ -19,7 +16,6 @@ use futures::{
     future::{LocalBoxFuture, Shared},
     Future, FutureExt,
 };
-use parking_lot::RwLock;
 use slotmap::SlotMap;
 
 pub use async_context::*;
@@ -34,12 +30,11 @@ use util::ResultExt;
 use crate::{
     current_platform, hash, init_app_menus, Action, ActionRegistry, Any, AnyView, AnyWindowHandle,
     Asset, AssetSource, BackgroundExecutor, ClipboardItem, Context, DispatchPhase, DisplayId,
-    Entity, EventEmitter, FocusHandle, FocusId, ForegroundExecutor, Global, KeyBinding, Keymap,
-    Keystroke, LayoutId, Menu, MenuItem, OwnedMenu, PathPromptOptions, Pixels, Platform,
-    PlatformDisplay, Point, PromptBuilder, PromptHandle, PromptLevel, Render,
-    RenderablePromptHandle, Reservation, ScreenCaptureSource, SharedString, SubscriberSet,
-    Subscription, SvgRenderer, Task, TextSystem, View, ViewContext, Window, WindowAppearance,
-    WindowContext, WindowHandle, WindowId,
+    Entity, EventEmitter, ForegroundExecutor, Global, KeyBinding, Keymap, Keystroke, LayoutId,
+    Menu, MenuItem, OwnedMenu, PathPromptOptions, Pixels, Platform, PlatformDisplay, Point,
+    PromptBuilder, PromptHandle, PromptLevel, Render, RenderablePromptHandle, Reservation,
+    ScreenCaptureSource, SharedString, SubscriberSet, Subscription, SvgRenderer, Task, TextSystem,
+    View, ViewContext, Window, WindowAppearance, WindowContext, WindowHandle, WindowId,
 };
 
 mod async_context;
@@ -247,7 +242,6 @@ pub struct AppContext {
     pub(crate) new_view_observers: SubscriberSet<TypeId, NewViewListener>,
     pub(crate) windows: SlotMap<WindowId, Option<Window>>,
     pub(crate) window_handles: FxHashMap<WindowId, AnyWindowHandle>,
-    pub(crate) focus_handles: Arc<RwLock<SlotMap<FocusId, AtomicUsize>>>,
     pub(crate) keymap: Rc<RefCell<Keymap>>,
     pub(crate) keyboard_layout: SharedString,
     pub(crate) global_action_listeners:
@@ -308,9 +302,8 @@ impl AppContext {
                 entities,
                 new_view_observers: SubscriberSet::new(),
                 new_model_observers: SubscriberSet::new(),
-                windows: SlotMap::with_key(),
                 window_handles: FxHashMap::default(),
-                focus_handles: Arc::new(RwLock::new(SlotMap::with_key())),
+                windows: SlotMap::with_key(),
                 keymap: Rc::new(RefCell::new(Keymap::default())),
                 keyboard_layout,
                 global_action_listeners: FxHashMap::default(),
@@ -446,7 +439,6 @@ impl AppContext {
         self.defer(move |_| activate());
         subscription
     }
-
     pub(crate) fn observe_internal<W, E>(
         &mut self,
         entity: &E,
@@ -575,12 +567,6 @@ impl AppContext {
                 }
             }
         })
-    }
-
-    /// Obtain a new [`FocusHandle`], which allows you to track and manipulate the keyboard focus
-    /// for elements rendered within this window.
-    pub fn focus_handle(&self) -> FocusHandle {
-        FocusHandle::new(&self.focus_handles)
     }
 
     /// Instructs the platform to activate the application by bringing it to the foreground.
@@ -858,25 +844,28 @@ impl AppContext {
 
     /// Repeatedly called during `flush_effects` to handle a focused handle being dropped.
     fn release_dropped_focus_handles(&mut self) {
-        self.focus_handles
-            .clone()
-            .write()
-            .retain(|handle_id, count| {
-                if count.load(SeqCst) == 0 {
-                    for window_handle in self.windows() {
-                        window_handle
-                            .update(self, |_, cx| {
-                                if cx.window.focus == Some(handle_id) {
-                                    cx.blur();
-                                }
-                            })
-                            .unwrap();
+        for window_handle in self.windows() {
+            window_handle
+                .update(self, |_, cx| {
+                    let mut blur_window = false;
+                    let focus = cx.window.focus;
+                    cx.window.focus_handles.write().retain(|handle_id, count| {
+                        if count.load(SeqCst) == 0 {
+                            if focus == Some(handle_id) {
+                                blur_window = true;
+                            }
+                            false
+                        } else {
+                            true
+                        }
+                    });
+
+                    if blur_window {
+                        cx.blur();
                     }
-                    false
-                } else {
-                    true
-                }
-            });
+                })
+                .unwrap();
+        }
     }
 
     fn apply_notify_effect(&mut self, emitter: EntityId) {

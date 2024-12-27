@@ -22,7 +22,11 @@ impl Delegate {
                 .iter()
                 .copied()
                 .enumerate()
-                .map(|(id, string)| StringMatchCandidate::new(id, string))
+                .map(|(id, string)| StringMatchCandidate {
+                    id,
+                    char_bag: string.into(),
+                    string: string.into(),
+                })
                 .collect(),
             matches: vec![],
             selected_ix: 0,
@@ -55,7 +59,7 @@ impl PickerDelegate for Delegate {
             ListItem::new(ix)
                 .inset(true)
                 .spacing(ListItemSpacing::Sparse)
-                .toggle_state(selected)
+                .selected(selected)
                 .child(Label::new(candidate)),
         )
     }

@@ -11,8 +11,8 @@ use futures::{
 use fuzzy::StringMatchCandidate;
 use gpui::{
     actions, point, size, transparent_black, Action, AppContext, BackgroundExecutor, Bounds,
-    EventEmitter, Global, PromptLevel, ReadGlobal, Subscription, Task, TextStyle, TitlebarOptions,
-    UpdateGlobal, View, WindowBounds, WindowHandle, WindowOptions,
+    EventEmitter, Global, HighlightStyle, PromptLevel, ReadGlobal, Subscription, Task, TextStyle,
+    TitlebarOptions, UpdateGlobal, View, WindowBounds, WindowHandle, WindowOptions,
 };
 use heed::{
     types::{SerdeBincode, SerdeJson, Str},
@@ -232,13 +232,13 @@ impl PickerDelegate for PromptPickerDelegate {
         let element = ListItem::new(ix)
             .inset(true)
             .spacing(ListItemSpacing::Sparse)
-            .toggle_state(selected)
+            .selected(selected)
             .child(h_flex().h_5().line_height(relative(1.)).child(Label::new(
                 prompt.title.clone().unwrap_or("Untitled".into()),
             )))
             .end_slot::<IconButton>(default.then(|| {
                 IconButton::new("toggle-default-prompt", IconName::SparkleFilled)
-                    .toggle_state(true)
+                    .selected(true)
                     .icon_color(Color::Accent)
                     .shape(IconButtonShape::Square)
                     .tooltip(move |cx| Tooltip::text("Remove from Default Prompt", cx))
@@ -274,7 +274,7 @@ impl PickerDelegate for PromptPickerDelegate {
                     })
                     .child(
                         IconButton::new("toggle-default-prompt", IconName::Sparkle)
-                            .toggle_state(default)
+                            .selected(default)
                             .selected_icon(IconName::SparkleFilled)
                             .icon_color(if default { Color::Accent } else { Color::Muted })
                             .shape(IconButtonShape::Square)
@@ -928,8 +928,10 @@ impl PromptLibrary {
                                                     status: cx.theme().status().clone(),
                                                     inlay_hints_style:
                                                         editor::make_inlay_hints_style(cx),
-                                                    inline_completion_styles:
-                                                        editor::make_suggestion_styles(cx),
+                                                    suggestions_style: HighlightStyle {
+                                                        color: Some(cx.theme().status().predictive),
+                                                        ..HighlightStyle::default()
+                                                    },
                                                     ..EditorStyle::default()
                                                 },
                                             )),
@@ -1053,7 +1055,7 @@ impl PromptLibrary {
                                                         IconName::Sparkle,
                                                     )
                                                     .style(ButtonStyle::Transparent)
-                                                    .toggle_state(prompt_metadata.default)
+                                                    .selected(prompt_metadata.default)
                                                     .selected_icon(IconName::SparkleFilled)
                                                     .icon_color(if prompt_metadata.default {
                                                         Color::Accent
@@ -1439,7 +1441,10 @@ impl PromptStore {
                     .iter()
                     .enumerate()
                     .filter_map(|(ix, metadata)| {
-                        Some(StringMatchCandidate::new(ix, metadata.title.as_ref()?))
+                        Some(StringMatchCandidate::new(
+                            ix,
+                            metadata.title.as_ref()?.to_string(),
+                        ))
                     })
                     .collect::<Vec<_>>();
                 let matches = fuzzy::match_strings(

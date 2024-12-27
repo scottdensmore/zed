@@ -48,17 +48,8 @@ impl CursorPosition {
     ) {
         let editor = editor.downgrade();
         self.update_position = cx.spawn(|cursor_position, mut cx| async move {
-            let is_singleton = editor
-                .update(&mut cx, |editor, cx| {
-                    editor.buffer().read(cx).is_singleton()
-                })
-                .ok()
-                .unwrap_or(true);
-
-            if !is_singleton {
-                if let Some(debounce) = debounce {
-                    cx.background_executor().timer(debounce).await;
-                }
+            if let Some(debounce) = debounce {
+                cx.background_executor().timer(debounce).await;
             }
 
             editor

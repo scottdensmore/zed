@@ -98,7 +98,7 @@ impl PickerDelegate for KernelPickerDelegate {
 
         if query.is_empty() {
             self.filtered_kernels = all_kernels;
-            return Task::ready(());
+            return Task::Ready(Some(()));
         }
 
         self.filtered_kernels = if query.is_empty() {
@@ -110,7 +110,7 @@ impl PickerDelegate for KernelPickerDelegate {
                 .collect()
         };
 
-        return Task::ready(());
+        return Task::Ready(Some(()));
     }
 
     fn confirm(&mut self, _secondary: bool, cx: &mut ViewContext<Picker<Self>>) {
@@ -150,7 +150,7 @@ impl PickerDelegate for KernelPickerDelegate {
             ListItem::new(ix)
                 .inset(true)
                 .spacing(ListItemSpacing::Sparse)
-                .toggle_state(selected)
+                .selected(selected)
                 .child(
                     h_flex()
                         .w_full()
@@ -253,7 +253,7 @@ impl<T: PopoverTrigger> RenderOnce for KernelSelector<T> {
         PopoverMenu::new("kernel-switcher")
             .menu(move |_cx| Some(picker_view.clone()))
             .trigger(self.trigger)
-            .attach(gpui::Corner::BottomLeft)
+            .attach(gpui::AnchorCorner::BottomLeft)
             .when_some(self.handle, |menu, handle| menu.with_handle(handle))
     }
 }

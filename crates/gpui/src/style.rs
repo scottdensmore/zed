@@ -5,11 +5,10 @@ use std::{
 };
 
 use crate::{
-    black, phi, point, quad, rems, size, AbsoluteLength, Background, BackgroundTag, Bounds,
-    ContentMask, Corners, CornersRefinement, CursorStyle, DefiniteLength, DevicePixels, Edges,
-    EdgesRefinement, Font, FontFallbacks, FontFeatures, FontStyle, FontWeight, Hsla, Length,
-    Pixels, Point, PointRefinement, Rgba, SharedString, Size, SizeRefinement, Styled, TextRun,
-    WindowContext,
+    black, phi, point, quad, rems, size, AbsoluteLength, Bounds, ContentMask, Corners,
+    CornersRefinement, CursorStyle, DefiniteLength, DevicePixels, Edges, EdgesRefinement, Font,
+    FontFallbacks, FontFeatures, FontStyle, FontWeight, Hsla, Length, Pixels, Point,
+    PointRefinement, Rgba, SharedString, Size, SizeRefinement, Styled, TextRun, WindowContext,
 };
 use collections::HashSet;
 use refineable::Refineable;
@@ -509,7 +508,7 @@ impl Style {
             } => None,
             _ => {
                 let mut min = bounds.origin;
-                let mut max = bounds.bottom_right();
+                let mut max = bounds.lower_right();
 
                 if self
                     .border_color
@@ -530,12 +529,12 @@ impl Style {
                     // x visible, y hidden
                     (true, false) => Bounds::from_corners(
                         point(min.x, bounds.origin.y),
-                        point(max.x, bounds.bottom_right().y),
+                        point(max.x, bounds.lower_right().y),
                     ),
                     // x hidden, y visible
                     (false, true) => Bounds::from_corners(
                         point(bounds.origin.x, min.y),
-                        point(bounds.bottom_right().x, max.y),
+                        point(bounds.lower_right().x, max.y),
                     ),
                     // both hidden
                     (false, false) => Bounds::from_corners(min, max),
@@ -573,17 +572,7 @@ impl Style {
 
         let background_color = self.background.as_ref().and_then(Fill::color);
         if background_color.map_or(false, |color| !color.is_transparent()) {
-            let mut border_color = match background_color {
-                Some(color) => match color.tag {
-                    BackgroundTag::Solid => color.solid,
-                    BackgroundTag::LinearGradient => color
-                        .colors
-                        .first()
-                        .map(|stop| stop.color)
-                        .unwrap_or_default(),
-                },
-                None => Hsla::default(),
-            };
+            let mut border_color = background_color.unwrap_or_default();
             border_color.a = 0.;
             cx.paint_quad(quad(
                 bounds,
@@ -604,19 +593,19 @@ impl Style {
 
             let top_bounds = Bounds::from_corners(
                 bounds.origin,
-                bounds.top_right() + point(Pixels::ZERO, max_border_width.max(max_corner_radius)),
+                bounds.upper_right() + point(Pixels::ZERO, max_border_width.max(max_corner_radius)),
             );
             let bottom_bounds = Bounds::from_corners(
-                bounds.bottom_left() - point(Pixels::ZERO, max_border_width.max(max_corner_radius)),
-                bounds.bottom_right(),
+                bounds.lower_left() - point(Pixels::ZERO, max_border_width.max(max_corner_radius)),
+                bounds.lower_right(),
             );
             let left_bounds = Bounds::from_corners(
-                top_bounds.bottom_left(),
+                top_bounds.lower_left(),
                 bottom_bounds.origin + point(max_border_width, Pixels::ZERO),
             );
             let right_bounds = Bounds::from_corners(
-                top_bounds.bottom_right() - point(max_border_width, Pixels::ZERO),
-                bottom_bounds.top_right(),
+                top_bounds.lower_right() - point(max_border_width, Pixels::ZERO),
+                bottom_bounds.upper_right(),
             );
 
             let mut background = self.border_color.unwrap_or_default();
@@ -748,14 +737,12 @@ pub struct StrikethroughStyle {
 #[derive(Clone, Debug)]
 pub enum Fill {
     /// A solid color fill.
-    Color(Background),
+    Color(Hsla),
 }
 
 impl Fill {
     /// Unwrap this fill into a solid color, if it is one.
-    ///
-    /// If the fill is not a solid color, this method returns `None`.
-    pub fn color(&self) -> Option<Background> {
+    pub fn color(&self) -> Option<Hsla> {
         match self {
             Fill::Color(color) => Some(*color),
         }
@@ -764,25 +751,19 @@ impl Fill {
 
 impl Default for Fill {
     fn default() -> Self {
-        Self::Color(Background::default())
+        Self::Color(Hsla::default())
     }
 }
 
 impl From<Hsla> for Fill {
     fn from(color: Hsla) -> Self {
-        Self::Color(color.into())
+        Self::Color(color)
     }
 }
 
 impl From<Rgba> for Fill {
     fn from(color: Rgba) -> Self {
         Self::Color(color.into())
-    }
-}
-
-impl From<Background> for Fill {
-    fn from(background: Background) -> Self {
-        Self::Color(background)
     }
 }
 

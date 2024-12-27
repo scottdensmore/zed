@@ -1,16 +1,15 @@
-use gpui::{
-    black, canvas, div, green, point, prelude::*, px, rgb, size, transparent_black, white, App,
-    AppContext, Bounds, CursorStyle, Decorations, Hsla, MouseButton, Pixels, Point, ResizeEdge,
-    Size, ViewContext, WindowBackgroundAppearance, WindowBounds, WindowDecorations, WindowOptions,
-};
+use gpui::*;
+use prelude::FluentBuilder;
 
 struct WindowShadow {}
 
-// Things to do:
-// 1. We need a way of calculating which edge or corner the mouse is on,
-//    and then dispatch on that
-// 2. We need to improve the shadow rendering significantly
-// 3. We need to implement the techniques in here in Zed
+/*
+Things to do:
+1. We need a way of calculating which edge or corner the mouse is on,
+    and then dispatch on that
+2. We need to improve the shadow rendering significantly
+3. We need to implement the techniques in here in Zed
+*/
 
 impl Render for WindowShadow {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
@@ -129,7 +128,7 @@ impl Render for WindowShadow {
                             div()
                                 .flex()
                                 .bg(white())
-                                .size(px(300.0))
+                                .size(Length::Definite(Pixels(300.0).into()))
                                 .justify_center()
                                 .items_center()
                                 .shadow_lg()

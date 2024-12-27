@@ -373,7 +373,6 @@ messages!(
     (SyncExtensions, Background),
     (SyncExtensionsResponse, Background),
     (InstallExtension, Background),
-    (RegisterBufferWithLanguageServers, Background),
 );
 
 request_messages!(
@@ -500,7 +499,6 @@ request_messages!(
     (CancelLanguageServerWork, Ack),
     (SyncExtensions, SyncExtensionsResponse),
     (InstallExtension, Ack),
-    (RegisterBufferWithLanguageServers, Ack),
 );
 
 entity_messages!(
@@ -586,7 +584,6 @@ entity_messages!(
     ActiveToolchain,
     GetPathMetadata,
     CancelLanguageServerWork,
-    RegisterBufferWithLanguageServers,
 );
 
 entity_messages!(

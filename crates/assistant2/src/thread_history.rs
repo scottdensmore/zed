@@ -2,7 +2,7 @@ use gpui::{
     uniform_list, AppContext, FocusHandle, FocusableView, Model, UniformListScrollHandle, WeakView,
 };
 use time::{OffsetDateTime, UtcOffset};
-use ui::{prelude::*, IconButtonShape, ListItem, ListItemSpacing, Tooltip};
+use ui::{prelude::*, IconButtonShape, ListItem};
 
 use crate::thread::Thread;
 use crate::thread_store::ThreadStore;
@@ -66,10 +66,10 @@ impl Render for ThreadHistory {
                                 threads[range]
                                     .iter()
                                     .map(|thread| {
-                                        h_flex().w_full().pb_1().child(PastThread::new(
+                                        PastThread::new(
                                             thread.clone(),
                                             history.assistant_panel.clone(),
-                                        ))
+                                        )
                                     })
                                     .collect()
                             },
@@ -117,29 +117,17 @@ impl RenderOnce for PastThread {
                 .unwrap_or(UtcOffset::UTC),
             time_format::TimestampFormat::EnhancedAbsolute,
         );
-
         ListItem::new(("past-thread", self.thread.entity_id()))
-            .outlined()
-            .start_slot(
-                Icon::new(IconName::MessageCircle)
-                    .size(IconSize::Small)
-                    .color(Color::Muted),
-            )
-            .spacing(ListItemSpacing::Sparse)
-            .child(Label::new(summary).size(LabelSize::Small).text_ellipsis())
+            .start_slot(Icon::new(IconName::MessageBubbles))
+            .child(Label::new(summary))
             .end_slot(
                 h_flex()
                     .gap_2()
-                    .child(
-                        Label::new(thread_timestamp)
-                            .color(Color::Disabled)
-                            .size(LabelSize::Small),
-                    )
+                    .child(Label::new(thread_timestamp).color(Color::Disabled))
                     .child(
                         IconButton::new("delete", IconName::TrashAlt)
                             .shape(IconButtonShape::Square)
                             .icon_size(IconSize::Small)
-                            .tooltip(|cx| Tooltip::text("Delete Thread", cx))
                             .on_click({
                                 let assistant_panel = self.assistant_panel.clone();
                                 let id = id.clone();

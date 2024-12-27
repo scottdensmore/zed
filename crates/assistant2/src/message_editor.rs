@@ -1,113 +1,49 @@
-use std::sync::Arc;
-
-use editor::{Editor, EditorElement, EditorEvent, EditorStyle};
-use fs::Fs;
-use gpui::{
-    AppContext, DismissEvent, FocusableView, Model, Subscription, TextStyle, View, WeakModel,
-    WeakView,
-};
+use editor::{Editor, EditorElement, EditorStyle};
+use gpui::{AppContext, FocusableView, Model, TextStyle, View};
 use language_model::{LanguageModelRegistry, LanguageModelRequestTool};
 use language_model_selector::LanguageModelSelector;
-use rope::Point;
+use picker::Picker;
 use settings::Settings;
 use theme::ThemeSettings;
 use ui::{
-    prelude::*, ButtonLike, ElevationIndex, KeyBinding, PopoverMenu, PopoverMenuHandle,
-    SwitchWithLabel,
+    prelude::*, ButtonLike, CheckboxWithLabel, ElevationIndex, IconButtonShape, KeyBinding,
+    PopoverMenuHandle, Tooltip,
 };
-use workspace::Workspace;
 
-use crate::assistant_model_selector::AssistantModelSelector;
-use crate::context_picker::{ConfirmBehavior, ContextPicker};
-use crate::context_store::ContextStore;
-use crate::context_strip::ContextStrip;
+use crate::context::{Context, ContextKind};
+use crate::context_picker::{ContextPicker, ContextPickerDelegate};
 use crate::thread::{RequestKind, Thread};
-use crate::thread_store::ThreadStore;
-use crate::{Chat, ToggleContextPicker, ToggleModelSelector};
+use crate::ui::ContextPill;
+use crate::{Chat, ToggleModelSelector};
 
 pub struct MessageEditor {
     thread: Model<Thread>,
     editor: View<Editor>,
-    context_store: Model<ContextStore>,
-    context_strip: View<ContextStrip>,
-    context_picker_menu_handle: PopoverMenuHandle<ContextPicker>,
-    inline_context_picker: View<ContextPicker>,
-    inline_context_picker_menu_handle: PopoverMenuHandle<ContextPicker>,
-    model_selector: View<AssistantModelSelector>,
-    model_selector_menu_handle: PopoverMenuHandle<LanguageModelSelector>,
+    context: Vec<Context>,
+    pub(crate) context_picker_handle: PopoverMenuHandle<Picker<ContextPickerDelegate>>,
     use_tools: bool,
-    _subscriptions: Vec<Subscription>,
 }
 
 impl MessageEditor {
-    pub fn new(
-        fs: Arc<dyn Fs>,
-        workspace: WeakView<Workspace>,
-        thread_store: WeakModel<ThreadStore>,
-        thread: Model<Thread>,
-        cx: &mut ViewContext<Self>,
-    ) -> Self {
-        let context_store = cx.new_model(|_cx| ContextStore::new());
-        let context_picker_menu_handle = PopoverMenuHandle::default();
-        let inline_context_picker_menu_handle = PopoverMenuHandle::default();
-        let model_selector_menu_handle = PopoverMenuHandle::default();
-
-        let editor = cx.new_view(|cx| {
-            let mut editor = Editor::auto_height(10, cx);
-            editor.set_placeholder_text("Ask anything, @ to add context", cx);
-            editor.set_show_indent_guides(false, cx);
-
-            editor
-        });
-        let inline_context_picker = cx.new_view(|cx| {
-            ContextPicker::new(
-                workspace.clone(),
-                Some(thread_store.clone()),
-                context_store.downgrade(),
-                ConfirmBehavior::Close,
-                cx,
-            )
-        });
-        let subscriptions = vec![
-            cx.subscribe(&editor, Self::handle_editor_event),
-            cx.subscribe(
-                &inline_context_picker,
-                Self::handle_inline_context_picker_event,
-            ),
-        ];
+    pub fn new(thread: Model<Thread>, cx: &mut ViewContext<Self>) -> Self {
+        let mocked_context = vec![Context {
+            name: "shape.rs".into(),
+            kind: ContextKind::File,
+            text: "```rs\npub enum Shape {\n    Circle,\n    Square,\n    Triangle,\n}".into(),
+        }];
 
         Self {
             thread,
-            editor: editor.clone(),
-            context_store: context_store.clone(),
-            context_strip: cx.new_view(|cx| {
-                ContextStrip::new(
-                    context_store,
-                    workspace.clone(),
-                    Some(thread_store.clone()),
-                    editor.focus_handle(cx),
-                    context_picker_menu_handle.clone(),
-                    cx,
-                )
+            editor: cx.new_view(|cx| {
+                let mut editor = Editor::auto_height(80, cx);
+                editor.set_placeholder_text("Ask anything or type @ to add context", cx);
+
+                editor
             }),
-            context_picker_menu_handle,
-            inline_context_picker,
-            inline_context_picker_menu_handle,
-            model_selector: cx.new_view(|cx| {
-                AssistantModelSelector::new(fs, model_selector_menu_handle.clone(), cx)
-            }),
-            model_selector_menu_handle,
+            context: mocked_context,
+            context_picker_handle: PopoverMenuHandle::default(),
             use_tools: false,
-            _subscriptions: subscriptions,
         }
-    }
-
-    fn toggle_model_selector(&mut self, _: &ToggleModelSelector, cx: &mut ViewContext<Self>) {
-        self.model_selector_menu_handle.toggle(cx)
-    }
-
-    fn toggle_context_picker(&mut self, _: &ToggleContextPicker, cx: &mut ViewContext<Self>) {
-        self.context_picker_menu_handle.toggle(cx);
     }
 
     fn chat(&mut self, _: &Chat, cx: &mut ViewContext<Self>) {
@@ -136,7 +72,7 @@ impl MessageEditor {
             editor.clear(cx);
             text
         });
-        let context = self.context_store.update(cx, |this, _cx| this.drain());
+        let context = self.context.drain(..).collect::<Vec<_>>();
 
         self.thread.update(cx, |thread, cx| {
             thread.insert_user_message(user_message, context, cx);
@@ -161,38 +97,55 @@ impl MessageEditor {
         None
     }
 
-    fn handle_editor_event(
-        &mut self,
-        editor: View<Editor>,
-        event: &EditorEvent,
-        cx: &mut ViewContext<Self>,
-    ) {
-        match event {
-            EditorEvent::SelectionsChanged { .. } => {
-                editor.update(cx, |editor, cx| {
-                    let snapshot = editor.buffer().read(cx).snapshot(cx);
-                    let newest_cursor = editor.selections.newest::<Point>(cx).head();
-                    if newest_cursor.column > 0 {
-                        let behind_cursor = Point::new(newest_cursor.row, newest_cursor.column - 1);
-                        let char_behind_cursor = snapshot.chars_at(behind_cursor).next();
-                        if char_behind_cursor == Some('@') {
-                            self.inline_context_picker_menu_handle.show(cx);
-                        }
-                    }
-                });
-            }
-            _ => {}
-        }
-    }
+    fn render_language_model_selector(&self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+        let active_provider = LanguageModelRegistry::read_global(cx).active_provider();
+        let active_model = LanguageModelRegistry::read_global(cx).active_model();
 
-    fn handle_inline_context_picker_event(
-        &mut self,
-        _inline_context_picker: View<ContextPicker>,
-        _event: &DismissEvent,
-        cx: &mut ViewContext<Self>,
-    ) {
-        let editor_focus_handle = self.editor.focus_handle(cx);
-        cx.focus(&editor_focus_handle);
+        LanguageModelSelector::new(
+            |model, _cx| {
+                println!("Selected {:?}", model.name());
+            },
+            ButtonLike::new("active-model")
+                .style(ButtonStyle::Subtle)
+                .child(
+                    h_flex()
+                        .w_full()
+                        .gap_0p5()
+                        .child(
+                            div()
+                                .overflow_x_hidden()
+                                .flex_grow()
+                                .whitespace_nowrap()
+                                .child(match (active_provider, active_model) {
+                                    (Some(provider), Some(model)) => h_flex()
+                                        .gap_1()
+                                        .child(
+                                            Icon::new(
+                                                model.icon().unwrap_or_else(|| provider.icon()),
+                                            )
+                                            .color(Color::Muted)
+                                            .size(IconSize::XSmall),
+                                        )
+                                        .child(
+                                            Label::new(model.name().0)
+                                                .size(LabelSize::Small)
+                                                .color(Color::Muted),
+                                        )
+                                        .into_any_element(),
+                                    _ => Label::new("No model selected")
+                                        .size(LabelSize::Small)
+                                        .color(Color::Muted)
+                                        .into_any_element(),
+                                }),
+                        )
+                        .child(
+                            Icon::new(IconName::ChevronDown)
+                                .color(Color::Muted)
+                                .size(IconSize::XSmall),
+                        ),
+                )
+                .tooltip(move |cx| Tooltip::for_action("Change Model", &ToggleModelSelector, cx)),
+        )
     }
 }
 
@@ -205,87 +158,96 @@ impl FocusableView for MessageEditor {
 impl Render for MessageEditor {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let font_size = TextSize::Default.rems(cx);
-        let line_height = font_size.to_pixels(cx.rem_size()) * 1.5;
+        let line_height = font_size.to_pixels(cx.rem_size()) * 1.3;
         let focus_handle = self.editor.focus_handle(cx);
-        let inline_context_picker = self.inline_context_picker.clone();
-        let bg_color = cx.theme().colors().editor_background;
 
         v_flex()
             .key_context("MessageEditor")
             .on_action(cx.listener(Self::chat))
-            .on_action(cx.listener(Self::toggle_model_selector))
-            .on_action(cx.listener(Self::toggle_context_picker))
             .size_full()
             .gap_2()
             .p_2()
-            .bg(bg_color)
-            .child(self.context_strip.clone())
+            .bg(cx.theme().colors().editor_background)
             .child(
-                v_flex()
-                    .gap_4()
-                    .child({
-                        let settings = ThemeSettings::get_global(cx);
-                        let text_style = TextStyle {
-                            color: cx.theme().colors().text,
-                            font_family: settings.ui_font.family.clone(),
-                            font_features: settings.ui_font.features.clone(),
-                            font_size: font_size.into(),
-                            font_weight: settings.ui_font.weight,
-                            line_height: line_height.into(),
-                            ..Default::default()
-                        };
-
-                        EditorElement::new(
-                            &self.editor,
-                            EditorStyle {
-                                background: bg_color,
-                                local_player: cx.theme().players().local(),
-                                text: text_style,
-                                ..Default::default()
-                            },
-                        )
-                    })
-                    .child(
-                        PopoverMenu::new("inline-context-picker")
-                            .menu(move |_cx| Some(inline_context_picker.clone()))
-                            .attach(gpui::Corner::TopLeft)
-                            .anchor(gpui::Corner::BottomLeft)
-                            .offset(gpui::Point {
-                                x: px(0.0),
-                                y: px(-16.0),
-                            })
-                            .with_handle(self.inline_context_picker_menu_handle.clone()),
+                h_flex()
+                    .flex_wrap()
+                    .gap_2()
+                    .child(ContextPicker::new(
+                        cx.view().downgrade(),
+                        IconButton::new("add-context", IconName::Plus)
+                            .shape(IconButtonShape::Square)
+                            .icon_size(IconSize::Small),
+                    ))
+                    .children(
+                        self.context
+                            .iter()
+                            .map(|context| ContextPill::new(context.clone())),
                     )
+                    .when(!self.context.is_empty(), |parent| {
+                        parent.child(
+                            IconButton::new("remove-all-context", IconName::Eraser)
+                                .shape(IconButtonShape::Square)
+                                .icon_size(IconSize::Small)
+                                .tooltip(move |cx| Tooltip::text("Remove All Context", cx))
+                                .on_click(cx.listener(|this, _event, cx| {
+                                    this.context.clear();
+                                    cx.notify();
+                                })),
+                        )
+                    }),
+            )
+            .child({
+                let settings = ThemeSettings::get_global(cx);
+                let text_style = TextStyle {
+                    color: cx.theme().colors().editor_foreground,
+                    font_family: settings.ui_font.family.clone(),
+                    font_features: settings.ui_font.features.clone(),
+                    font_size: font_size.into(),
+                    font_weight: settings.ui_font.weight,
+                    line_height: line_height.into(),
+                    ..Default::default()
+                };
+
+                EditorElement::new(
+                    &self.editor,
+                    EditorStyle {
+                        background: cx.theme().colors().editor_background,
+                        local_player: cx.theme().players().local(),
+                        text: text_style,
+                        ..Default::default()
+                    },
+                )
+            })
+            .child(
+                h_flex()
+                    .justify_between()
+                    .child(h_flex().gap_2().child(CheckboxWithLabel::new(
+                        "use-tools",
+                        Label::new("Tools"),
+                        self.use_tools.into(),
+                        cx.listener(|this, selection, _cx| {
+                            this.use_tools = match selection {
+                                Selection::Selected => true,
+                                Selection::Unselected | Selection::Indeterminate => false,
+                            };
+                        }),
+                    )))
                     .child(
                         h_flex()
-                            .justify_between()
-                            .child(SwitchWithLabel::new(
-                                "use-tools",
-                                Label::new("Tools"),
-                                self.use_tools.into(),
-                                cx.listener(|this, selection, _cx| {
-                                    this.use_tools = match selection {
-                                        ToggleState::Selected => true,
-                                        ToggleState::Unselected | ToggleState::Indeterminate => {
-                                            false
-                                        }
-                                    };
-                                }),
-                            ))
+                            .gap_2()
+                            .child(self.render_language_model_selector(cx))
                             .child(
-                                h_flex().gap_1().child(self.model_selector.clone()).child(
-                                    ButtonLike::new("chat")
-                                        .style(ButtonStyle::Filled)
-                                        .layer(ElevationIndex::ModalSurface)
-                                        .child(Label::new("Submit"))
-                                        .children(
-                                            KeyBinding::for_action_in(&Chat, &focus_handle, cx)
-                                                .map(|binding| binding.into_any_element()),
-                                        )
-                                        .on_click(move |_event, cx| {
-                                            focus_handle.dispatch_action(&Chat, cx);
-                                        }),
-                                ),
+                                ButtonLike::new("chat")
+                                    .style(ButtonStyle::Filled)
+                                    .layer(ElevationIndex::ModalSurface)
+                                    .child(Label::new("Submit"))
+                                    .children(
+                                        KeyBinding::for_action_in(&Chat, &focus_handle, cx)
+                                            .map(|binding| binding.into_any_element()),
+                                    )
+                                    .on_click(move |_event, cx| {
+                                        focus_handle.dispatch_action(&Chat, cx);
+                                    }),
                             ),
                     ),
             )

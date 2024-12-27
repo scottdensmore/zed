@@ -250,9 +250,7 @@ impl ActiveCall {
         cx.spawn(move |this, mut cx| async move {
             let result = invite.await;
             if result.is_ok() {
-                this.update(&mut cx, |this, cx| {
-                    this.report_call_event("Participant Invited", cx)
-                })?;
+                this.update(&mut cx, |this, cx| this.report_call_event("invite", cx))?;
             } else {
                 //TODO: report collaboration error
                 log::error!("invite failed: {:?}", result);
@@ -320,7 +318,7 @@ impl ActiveCall {
             this.update(&mut cx, |this, cx| this.set_room(room.clone(), cx))?
                 .await?;
             this.update(&mut cx, |this, cx| {
-                this.report_call_event("Incoming Call Accepted", cx)
+                this.report_call_event("accept incoming", cx)
             })?;
             Ok(())
         })
@@ -333,7 +331,7 @@ impl ActiveCall {
             .borrow_mut()
             .take()
             .ok_or_else(|| anyhow!("no incoming call"))?;
-        telemetry::event!("Incoming Call Declined", room_id = call.room_id);
+        report_call_event_for_room("decline incoming", call.room_id, None, &self.client);
         self.client.send(proto::DeclineCall {
             room_id: call.room_id,
         })?;
@@ -368,7 +366,7 @@ impl ActiveCall {
             this.update(&mut cx, |this, cx| this.set_room(room.clone(), cx))?
                 .await?;
             this.update(&mut cx, |this, cx| {
-                this.report_call_event("Channel Joined", cx)
+                this.report_call_event("join channel", cx)
             })?;
             Ok(room)
         })
@@ -376,7 +374,7 @@ impl ActiveCall {
 
     pub fn hang_up(&mut self, cx: &mut ModelContext<Self>) -> Task<Result<()>> {
         cx.notify();
-        self.report_call_event("Call Ended", cx);
+        self.report_call_event("hang up", cx);
 
         Audio::end_call(cx);
 
@@ -395,7 +393,7 @@ impl ActiveCall {
         cx: &mut ModelContext<Self>,
     ) -> Task<Result<u64>> {
         if let Some((room, _)) = self.room.as_ref() {
-            self.report_call_event("Project Shared", cx);
+            self.report_call_event("share project", cx);
             room.update(cx, |room, cx| room.share_project(project, cx))
         } else {
             Task::ready(Err(anyhow!("no active call")))
@@ -408,7 +406,7 @@ impl ActiveCall {
         cx: &mut ModelContext<Self>,
     ) -> Result<()> {
         if let Some((room, _)) = self.room.as_ref() {
-            self.report_call_event("Project Unshared", cx);
+            self.report_call_event("unshare project", cx);
             room.update(cx, |room, cx| room.unshare_project(project, cx))
         } else {
             Err(anyhow!("no active call"))
@@ -488,13 +486,33 @@ impl ActiveCall {
     pub fn report_call_event(&self, operation: &'static str, cx: &mut AppContext) {
         if let Some(room) = self.room() {
             let room = room.read(cx);
-            telemetry::event!(
-                operation,
-                room_id = room.id(),
-                channel_id = room.channel_id()
-            )
+            report_call_event_for_room(operation, room.id(), room.channel_id(), &self.client);
         }
     }
+}
+
+pub fn report_call_event_for_room(
+    operation: &'static str,
+    room_id: u64,
+    channel_id: Option<ChannelId>,
+    client: &Arc<Client>,
+) {
+    let telemetry = client.telemetry();
+
+    telemetry.report_call_event(operation, Some(room_id), channel_id)
+}
+
+pub fn report_call_event_for_channel(
+    operation: &'static str,
+    channel_id: ChannelId,
+    client: &Arc<Client>,
+    cx: &AppContext,
+) {
+    let room = ActiveCall::global(cx).read(cx).room();
+
+    let telemetry = client.telemetry();
+
+    telemetry.report_call_event(operation, room.map(|r| r.read(cx).id()), Some(channel_id))
 }
 
 #[cfg(test)]

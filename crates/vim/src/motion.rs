@@ -585,6 +585,8 @@ impl Motion {
             | NextLineStart
             | PreviousLineStart
             | StartOfLineDownward
+            | SentenceBackward
+            | SentenceForward
             | StartOfParagraph
             | EndOfParagraph
             | WindowTop
@@ -609,8 +611,6 @@ impl Motion {
             | Left
             | Backspace
             | Right
-            | SentenceBackward
-            | SentenceForward
             | Space
             | StartOfLine { .. }
             | EndOfLineDownward

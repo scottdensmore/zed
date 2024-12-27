@@ -4,8 +4,8 @@ use editor::{scroll::Autoscroll, Editor};
 use feature_flags::{FeatureFlagAppExt, ZetaFeatureFlag};
 use fs::Fs;
 use gpui::{
-    actions, div, Action, AppContext, AsyncWindowContext, Corner, Entity, IntoElement,
-    ParentElement, Render, Subscription, View, ViewContext, WeakView, WindowContext,
+    div, Action, AnchorCorner, AppContext, AsyncWindowContext, Entity, IntoElement, ParentElement,
+    Render, Subscription, View, ViewContext, WeakView, WindowContext,
 };
 use language::{
     language_settings::{
@@ -16,6 +16,7 @@ use language::{
 use settings::{update_settings_file, Settings, SettingsStore};
 use std::{path::Path, sync::Arc};
 use supermaven::{AccountStatus, Supermaven};
+use ui::{Button, LabelSize};
 use workspace::{
     create_and_open_local_file,
     item::ItemHandle,
@@ -27,8 +28,6 @@ use workspace::{
 };
 use zed_actions::OpenBrowser;
 use zeta::RateCompletionModal;
-
-actions!(zeta, [RateCompletions]);
 
 const COPILOT_SETTINGS_URL: &str = "https://github.com/settings/copilot";
 
@@ -123,7 +122,7 @@ impl Render for InlineCompletionButton {
                                 _ => this.update(cx, |this, cx| this.build_copilot_start_menu(cx)),
                             })
                         })
-                        .anchor(Corner::BottomRight)
+                        .anchor(AnchorCorner::BottomRight)
                         .trigger(
                             IconButton::new("copilot-icon", icon)
                                 .tooltip(|cx| Tooltip::text("GitHub Copilot", cx)),
@@ -191,7 +190,7 @@ impl Render for InlineCompletionButton {
                             ),
                             _ => None,
                         })
-                        .anchor(Corner::BottomRight)
+                        .anchor(AnchorCorner::BottomRight)
                         .trigger(
                             IconButton::new("supermaven-icon", icon)
                                 .tooltip(move |cx| Tooltip::text(tooltip_text.clone(), cx)),
@@ -205,22 +204,16 @@ impl Render for InlineCompletionButton {
                 }
 
                 div().child(
-                    IconButton::new("zeta", IconName::ZedPredict)
-                        .tooltip(|cx| {
-                            Tooltip::with_meta(
-                                "Zed Predict",
-                                Some(&RateCompletions),
-                                "Click to rate completions",
-                                cx,
-                            )
-                        })
+                    Button::new("zeta", "ζ")
+                        .label_size(LabelSize::Small)
                         .on_click(cx.listener(|this, _, cx| {
                             if let Some(workspace) = this.workspace.upgrade() {
                                 workspace.update(cx, |workspace, cx| {
                                     RateCompletionModal::toggle(workspace, cx)
                                 });
                             }
-                        })),
+                        }))
+                        .tooltip(|cx| Tooltip::text("Rate Completions", cx)),
                 )
             }
         }

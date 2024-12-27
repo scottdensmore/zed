@@ -11,7 +11,7 @@ use std::{borrow::Cow, cmp::Reverse, sync::Arc};
 use theme::ActiveTheme;
 use util::ResultExt;
 use workspace::{
-    ui::{v_flex, Color, Label, LabelCommon, LabelLike, ListItem, ListItemSpacing, Toggleable},
+    ui::{v_flex, Color, Label, LabelCommon, LabelLike, ListItem, ListItemSpacing, Selectable},
     Workspace,
 };
 
@@ -78,7 +78,10 @@ impl ProjectSymbolsDelegate {
         ));
         let sort_key_for_match = |mat: &StringMatch| {
             let symbol = &self.symbols[mat.candidate_id];
-            (Reverse(OrderedFloat(mat.score)), symbol.label.filter_text())
+            (
+                Reverse(OrderedFloat(mat.score)),
+                &symbol.label.text[symbol.label.filter_range.clone()],
+            )
         };
 
         visible_matches.sort_unstable_by_key(sort_key_for_match);
@@ -174,7 +177,10 @@ impl PickerDelegate for ProjectSymbolsDelegate {
                         .iter()
                         .enumerate()
                         .map(|(id, symbol)| {
-                            StringMatchCandidate::new(id, &symbol.label.filter_text())
+                            StringMatchCandidate::new(
+                                id,
+                                symbol.label.text[symbol.label.filter_range.clone()].to_string(),
+                            )
                         })
                         .partition(|candidate| {
                             project
@@ -234,7 +240,7 @@ impl PickerDelegate for ProjectSymbolsDelegate {
             ListItem::new(ix)
                 .inset(true)
                 .spacing(ListItemSpacing::Sparse)
-                .toggle_state(selected)
+                .selected(selected)
                 .child(
                     v_flex()
                         .child(
@@ -286,7 +292,7 @@ mod tests {
 
         let _buffer = project
             .update(cx, |project, cx| {
-                project.open_local_buffer_with_lsp("/dir/test.rs", cx)
+                project.open_local_buffer("/dir/test.rs", cx)
             })
             .await
             .unwrap();
@@ -307,7 +313,7 @@ mod tests {
                     let candidates = fake_symbols
                         .iter()
                         .enumerate()
-                        .map(|(id, symbol)| StringMatchCandidate::new(id, &symbol.name))
+                        .map(|(id, symbol)| StringMatchCandidate::new(id, symbol.name.clone()))
                         .collect::<Vec<_>>();
                     let matches = if params.query.is_empty() {
                         Vec::new()

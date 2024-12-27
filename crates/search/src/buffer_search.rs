@@ -209,7 +209,6 @@ impl Render for BufferSearchBar {
 
         let input_base_styles = || {
             h_flex()
-                .min_w_32()
                 .w(input_width)
                 .h_8()
                 .px_2()
@@ -272,7 +271,7 @@ impl Render for BufferSearchBar {
                             .on_click(cx.listener(|this, _: &ClickEvent, cx| {
                                 this.toggle_replace(&ToggleReplace, cx);
                             }))
-                            .toggle_state(self.replace_enabled)
+                            .selected(self.replace_enabled)
                             .tooltip({
                                 let focus_handle = focus_handle.clone();
                                 move |cx| {
@@ -300,7 +299,7 @@ impl Render for BufferSearchBar {
                             .on_click(cx.listener(|this, _: &ClickEvent, cx| {
                                 this.toggle_selection(&ToggleSelection, cx);
                             }))
-                            .toggle_state(self.selection_search_enabled)
+                            .selected(self.selection_search_enabled)
                             .tooltip({
                                 let focus_handle = focus_handle.clone();
                                 move |cx| {
@@ -528,11 +527,6 @@ impl BufferSearchBar {
         registrar.register_handler(ForDeployed(|this, action: &ToggleWholeWord, cx| {
             if this.supported_options().word {
                 this.toggle_whole_word(action, cx);
-            }
-        }));
-        registrar.register_handler(ForDeployed(|this, action: &ToggleRegex, cx| {
-            if this.supported_options().regex {
-                this.toggle_regex(action, cx);
             }
         }));
         registrar.register_handler(ForDeployed(|this, action: &ToggleSelection, cx| {
