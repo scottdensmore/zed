@@ -147,7 +147,7 @@
     (#any-of? @variable "workspace")))
 
 ; Terraform specific keywords
-; TODO: ideally only for identifiers under a `variable` block to minimize false positives
+; FIXME: ideally only for identifiers under a `variable` block to minimize false positives
 ((identifier) @type
   (#any-of? @type "bool" "string" "number" "object" "tuple" "list" "map" "set" "any"))
 

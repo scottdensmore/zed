@@ -10,7 +10,6 @@ use gpui::{
     WeakModel, WeakView,
 };
 use picker::{Picker, PickerDelegate};
-use release_channel::ReleaseChannel;
 use ui::{prelude::*, ListItem, ListItemSpacing};
 use util::ResultExt;
 use workspace::Workspace;
@@ -22,12 +21,6 @@ use crate::context_picker::file_context_picker::FileContextPicker;
 use crate::context_picker::thread_context_picker::ThreadContextPicker;
 use crate::context_store::ContextStore;
 use crate::thread_store::ThreadStore;
-
-#[derive(Debug, Clone, Copy)]
-pub enum ConfirmBehavior {
-    KeepOpen,
-    Close,
-}
 
 #[derive(Debug, Clone)]
 enum ContextPickerMode {
@@ -48,30 +41,25 @@ impl ContextPicker {
         workspace: WeakView<Workspace>,
         thread_store: Option<WeakModel<ThreadStore>>,
         context_store: WeakModel<ContextStore>,
-        confirm_behavior: ConfirmBehavior,
         cx: &mut ViewContext<Self>,
     ) -> Self {
-        let mut entries = Vec::new();
-        entries.push(ContextPickerEntry {
-            name: "File".into(),
-            kind: ContextKind::File,
-            icon: IconName::File,
-        });
-        let release_channel = ReleaseChannel::global(cx);
-        // The directory context picker isn't fully implemented yet, so limit it
-        // to development builds.
-        if release_channel == ReleaseChannel::Dev {
-            entries.push(ContextPickerEntry {
+        let mut entries = vec![
+            ContextPickerEntry {
+                name: "File".into(),
+                kind: ContextKind::File,
+                icon: IconName::File,
+            },
+            ContextPickerEntry {
                 name: "Folder".into(),
                 kind: ContextKind::Directory,
                 icon: IconName::Folder,
-            });
-        }
-        entries.push(ContextPickerEntry {
-            name: "Fetch".into(),
-            kind: ContextKind::FetchedUrl,
-            icon: IconName::Globe,
-        });
+            },
+            ContextPickerEntry {
+                name: "Fetch".into(),
+                kind: ContextKind::FetchedUrl,
+                icon: IconName::Globe,
+            },
+        ];
 
         if thread_store.is_some() {
             entries.push(ContextPickerEntry {
@@ -86,7 +74,6 @@ impl ContextPicker {
             workspace,
             thread_store,
             context_store,
-            confirm_behavior,
             entries,
             selected_ix: 0,
         };
@@ -149,7 +136,6 @@ pub(crate) struct ContextPickerDelegate {
     workspace: WeakView<Workspace>,
     thread_store: Option<WeakModel<ThreadStore>>,
     context_store: WeakModel<ContextStore>,
-    confirm_behavior: ConfirmBehavior,
     entries: Vec<ContextPickerEntry>,
     selected_ix: usize,
 }
@@ -189,7 +175,6 @@ impl PickerDelegate for ContextPickerDelegate {
                                     self.context_picker.clone(),
                                     self.workspace.clone(),
                                     self.context_store.clone(),
-                                    self.confirm_behavior,
                                     cx,
                                 )
                             }));
@@ -200,7 +185,6 @@ impl PickerDelegate for ContextPickerDelegate {
                                     self.context_picker.clone(),
                                     self.workspace.clone(),
                                     self.context_store.clone(),
-                                    self.confirm_behavior,
                                     cx,
                                 )
                             }));
@@ -211,7 +195,6 @@ impl PickerDelegate for ContextPickerDelegate {
                                     self.context_picker.clone(),
                                     self.workspace.clone(),
                                     self.context_store.clone(),
-                                    self.confirm_behavior,
                                     cx,
                                 )
                             }));
@@ -223,7 +206,6 @@ impl PickerDelegate for ContextPickerDelegate {
                                         thread_store.clone(),
                                         self.context_picker.clone(),
                                         self.context_store.clone(),
-                                        self.confirm_behavior,
                                         cx,
                                     )
                                 }));

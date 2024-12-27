@@ -3200,7 +3200,7 @@ impl ProjectPanel {
             item_colors.default
         };
 
-        let bg_hover_color = if self.mouse_down || is_marked || is_active {
+        let bg_hover_color = if self.mouse_down {
             item_colors.marked_active
         } else {
             item_colors.hover
@@ -3224,7 +3224,9 @@ impl ProjectPanel {
             .border_1()
             .border_r_2()
             .border_color(border_color)
-            .hover(|style| style.bg(bg_hover_color))
+            .when(!is_marked && !is_active, |div| {
+                div.hover(|style| style.bg(bg_hover_color))
+            })
             .when(is_local, |div| {
                 div.on_drag_move::<ExternalPaths>(cx.listener(
                     move |this, event: &DragMoveEvent<ExternalPaths>, cx| {

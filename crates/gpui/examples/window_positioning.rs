@@ -1,8 +1,4 @@
-use gpui::{
-    div, point, prelude::*, px, rgb, App, AppContext, Bounds, DisplayId, Hsla, Pixels,
-    SharedString, Size, ViewContext, WindowBackgroundAppearance, WindowBounds, WindowKind,
-    WindowOptions,
-};
+use gpui::*;
 
 struct WindowContent {
     text: SharedString,

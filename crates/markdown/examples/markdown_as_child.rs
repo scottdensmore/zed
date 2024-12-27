@@ -1,5 +1,5 @@
 use assets::Assets;
-use gpui::{rgb, App, KeyBinding, Length, StyleRefinement, View, WindowOptions};
+use gpui::*;
 use language::{language_settings::AllLanguageSettings, LanguageRegistry};
 use markdown::{Markdown, MarkdownStyle};
 use node_runtime::NodeRuntime;

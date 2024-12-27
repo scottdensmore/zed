@@ -610,7 +610,7 @@ impl Session {
 
                     // Start a new kernel
                     this.update(&mut cx, |session, cx| {
-                        // TODO: Differentiate between restart and restart+clear-outputs
+                        // todo!(): Differentiate between restart and restart+clear-outputs
                         session.clear_outputs(cx);
                         session.start_kernel(cx);
                     })

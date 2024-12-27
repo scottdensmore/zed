@@ -6,7 +6,7 @@ use picker::{Picker, PickerDelegate};
 use ui::{prelude::*, ListItem};
 
 use crate::context::ContextKind;
-use crate::context_picker::{ConfirmBehavior, ContextPicker};
+use crate::context_picker::ContextPicker;
 use crate::context_store;
 use crate::thread::ThreadId;
 use crate::thread_store::ThreadStore;
@@ -20,15 +20,10 @@ impl ThreadContextPicker {
         thread_store: WeakModel<ThreadStore>,
         context_picker: WeakView<ContextPicker>,
         context_store: WeakModel<context_store::ContextStore>,
-        confirm_behavior: ConfirmBehavior,
         cx: &mut ViewContext<Self>,
     ) -> Self {
-        let delegate = ThreadContextPickerDelegate::new(
-            thread_store,
-            context_picker,
-            context_store,
-            confirm_behavior,
-        );
+        let delegate =
+            ThreadContextPickerDelegate::new(thread_store, context_picker, context_store);
         let picker = cx.new_view(|cx| Picker::uniform_list(delegate, cx));
 
         ThreadContextPicker { picker }
@@ -57,7 +52,6 @@ pub struct ThreadContextPickerDelegate {
     thread_store: WeakModel<ThreadStore>,
     context_picker: WeakView<ContextPicker>,
     context_store: WeakModel<context_store::ContextStore>,
-    confirm_behavior: ConfirmBehavior,
     matches: Vec<ThreadContextEntry>,
     selected_index: usize,
 }
@@ -67,13 +61,11 @@ impl ThreadContextPickerDelegate {
         thread_store: WeakModel<ThreadStore>,
         context_picker: WeakView<ContextPicker>,
         context_store: WeakModel<context_store::ContextStore>,
-        confirm_behavior: ConfirmBehavior,
     ) -> Self {
         ThreadContextPickerDelegate {
             thread_store,
             context_picker,
             context_store,
-            confirm_behavior,
             matches: Vec::new(),
             selected_index: 0,
         }
@@ -154,9 +146,7 @@ impl PickerDelegate for ThreadContextPickerDelegate {
     }
 
     fn confirm(&mut self, _secondary: bool, cx: &mut ViewContext<Picker<Self>>) {
-        let Some(entry) = self.matches.get(self.selected_index) else {
-            return;
-        };
+        let entry = &self.matches[self.selected_index];
 
         let Some(thread_store) = self.thread_store.upgrade() else {
             return;
@@ -190,11 +180,6 @@ impl PickerDelegate for ThreadContextPickerDelegate {
                 context_store.insert_context(ContextKind::Thread, entry.summary.clone(), text);
             })
             .ok();
-
-        match self.confirm_behavior {
-            ConfirmBehavior::KeepOpen => {}
-            ConfirmBehavior::Close => self.dismissed(cx),
-        }
     }
 
     fn dismissed(&mut self, cx: &mut ViewContext<Picker<Self>>) {
@@ -218,7 +203,7 @@ impl PickerDelegate for ThreadContextPickerDelegate {
             ListItem::new(ix)
                 .inset(true)
                 .toggle_state(selected)
-                .child(Label::new(thread.summary.clone())),
+                .child(thread.summary.clone()),
         )
     }
 }

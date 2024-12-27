@@ -1,8 +1,7 @@
 #![allow(missing_docs)]
 
-use gpui::Axis;
-
 use crate::prelude::*;
+use gpui::*;
 
 #[derive(IntoElement)]
 pub struct ToolStrip {
