@@ -7,6 +7,7 @@ use std::sync::OnceLock;
 use std::time::Duration;
 use std::{ops::Range, sync::Arc};
 
+use client::telemetry::Telemetry;
 use client::ExtensionMetadata;
 use collections::{BTreeMap, BTreeSet};
 use editor::{Editor, EditorElement, EditorStyle};
@@ -181,6 +182,7 @@ fn keywords_by_feature() -> &'static BTreeMap<Feature, Vec<&'static str>> {
 pub struct ExtensionsPage {
     workspace: WeakView<Workspace>,
     list: UniformListScrollHandle,
+    telemetry: Arc<Telemetry>,
     is_fetching_extensions: bool,
     filter: ExtensionFilter,
     remote_extension_entries: Vec<ExtensionMetadata>,
@@ -219,6 +221,7 @@ impl ExtensionsPage {
             let mut this = Self {
                 workspace: workspace.weak_handle(),
                 list: UniformListScrollHandle::new(),
+                telemetry: workspace.client().telemetry().clone(),
                 is_fetching_extensions: false,
                 filter: ExtensionFilter::All,
                 dev_extension_entries: Vec::new(),
@@ -701,15 +704,18 @@ impl ExtensionsPage {
 
         match status.clone() {
             ExtensionStatus::NotInstalled => (
-                Button::new(SharedString::from(extension.id.clone()), "Install").on_click({
-                    let extension_id = extension.id.clone();
-                    move |_, cx| {
-                        telemetry::event!("Extension Installed");
-                        ExtensionStore::global(cx).update(cx, |store, cx| {
-                            store.install_latest_extension(extension_id.clone(), cx)
-                        });
-                    }
-                }),
+                Button::new(SharedString::from(extension.id.clone()), "Install").on_click(
+                    cx.listener({
+                        let extension_id = extension.id.clone();
+                        move |this, _, cx| {
+                            this.telemetry
+                                .report_app_event("extensions: install extension".to_string());
+                            ExtensionStore::global(cx).update(cx, |store, cx| {
+                                store.install_latest_extension(extension_id.clone(), cx)
+                            });
+                        }
+                    }),
+                ),
                 None,
             ),
             ExtensionStatus::Installing => (
@@ -723,15 +729,18 @@ impl ExtensionsPage {
                 ),
             ),
             ExtensionStatus::Installed(installed_version) => (
-                Button::new(SharedString::from(extension.id.clone()), "Uninstall").on_click({
-                    let extension_id = extension.id.clone();
-                    move |_, cx| {
-                        telemetry::event!("Extension Uninstalled", extension_id);
-                        ExtensionStore::global(cx).update(cx, |store, cx| {
-                            store.uninstall_extension(extension_id.clone(), cx)
-                        });
-                    }
-                }),
+                Button::new(SharedString::from(extension.id.clone()), "Uninstall").on_click(
+                    cx.listener({
+                        let extension_id = extension.id.clone();
+                        move |this, _, cx| {
+                            this.telemetry
+                                .report_app_event("extensions: uninstall extension".to_string());
+                            ExtensionStore::global(cx).update(cx, |store, cx| {
+                                store.uninstall_extension(extension_id.clone(), cx)
+                            });
+                        }
+                    }),
+                ),
                 if installed_version == extension.manifest.version {
                     None
                 } else {
@@ -751,11 +760,13 @@ impl ExtensionsPage {
                                 })
                             })
                             .disabled(!is_compatible)
-                            .on_click({
+                            .on_click(cx.listener({
                                 let extension_id = extension.id.clone();
                                 let version = extension.manifest.version.clone();
-                                move |_, cx| {
-                                    telemetry::event!("Extension Installed", extension_id, version);
+                                move |this, _, cx| {
+                                    this.telemetry.report_app_event(
+                                        "extensions: install extension".to_string(),
+                                    );
                                     ExtensionStore::global(cx).update(cx, |store, cx| {
                                         store
                                             .upgrade_extension(
@@ -766,7 +777,7 @@ impl ExtensionsPage {
                                             .detach_and_log_err(cx)
                                     });
                                 }
-                            }),
+                            })),
                     )
                 },
             ),
@@ -961,16 +972,19 @@ impl ExtensionsPage {
         let upsells_count = self.upsells.len();
 
         v_flex().children(self.upsells.iter().enumerate().map(|(ix, feature)| {
+            let telemetry = self.telemetry.clone();
             let upsell = match feature {
                 Feature::Git => FeatureUpsell::new(
+                    telemetry,
                     "Zed comes with basic Git support. More Git features are coming in the future.",
                 )
                 .docs_url("https://zed.dev/docs/git"),
                 Feature::OpenIn => FeatureUpsell::new(
+                    telemetry,
                     "Zed supports linking to a source line on GitHub and others.",
                 )
                 .docs_url("https://zed.dev/docs/git#git-integrations"),
-                Feature::Vim => FeatureUpsell::new("Vim support is built-in to Zed!")
+                Feature::Vim => FeatureUpsell::new(telemetry, "Vim support is built-in to Zed!")
                     .docs_url("https://zed.dev/docs/vim")
                     .child(CheckboxWithLabel::new(
                         "enable-vim",
@@ -981,7 +995,8 @@ impl ExtensionsPage {
                             ui::ToggleState::Unselected
                         },
                         cx.listener(move |this, selection, cx| {
-                            telemetry::event!("Vim Mode Toggled", source = "Feature Upsell");
+                            this.telemetry
+                                .report_app_event("feature upsell: toggle vim".to_string());
                             this.update_settings::<VimModeSetting>(
                                 selection,
                                 cx,
@@ -989,22 +1004,36 @@ impl ExtensionsPage {
                             );
                         }),
                     )),
-                Feature::LanguageBash => FeatureUpsell::new("Shell support is built-in to Zed!")
-                    .docs_url("https://zed.dev/docs/languages/bash"),
-                Feature::LanguageC => FeatureUpsell::new("C support is built-in to Zed!")
-                    .docs_url("https://zed.dev/docs/languages/c"),
-                Feature::LanguageCpp => FeatureUpsell::new("C++ support is built-in to Zed!")
-                    .docs_url("https://zed.dev/docs/languages/cpp"),
-                Feature::LanguageGo => FeatureUpsell::new("Go support is built-in to Zed!")
-                    .docs_url("https://zed.dev/docs/languages/go"),
-                Feature::LanguagePython => FeatureUpsell::new("Python support is built-in to Zed!")
-                    .docs_url("https://zed.dev/docs/languages/python"),
-                Feature::LanguageReact => FeatureUpsell::new("React support is built-in to Zed!")
-                    .docs_url("https://zed.dev/docs/languages/typescript"),
-                Feature::LanguageRust => FeatureUpsell::new("Rust support is built-in to Zed!")
-                    .docs_url("https://zed.dev/docs/languages/rust"),
+                Feature::LanguageBash => {
+                    FeatureUpsell::new(telemetry, "Shell support is built-in to Zed!")
+                        .docs_url("https://zed.dev/docs/languages/bash")
+                }
+                Feature::LanguageC => {
+                    FeatureUpsell::new(telemetry, "C support is built-in to Zed!")
+                        .docs_url("https://zed.dev/docs/languages/c")
+                }
+                Feature::LanguageCpp => {
+                    FeatureUpsell::new(telemetry, "C++ support is built-in to Zed!")
+                        .docs_url("https://zed.dev/docs/languages/cpp")
+                }
+                Feature::LanguageGo => {
+                    FeatureUpsell::new(telemetry, "Go support is built-in to Zed!")
+                        .docs_url("https://zed.dev/docs/languages/go")
+                }
+                Feature::LanguagePython => {
+                    FeatureUpsell::new(telemetry, "Python support is built-in to Zed!")
+                        .docs_url("https://zed.dev/docs/languages/python")
+                }
+                Feature::LanguageReact => {
+                    FeatureUpsell::new(telemetry, "React support is built-in to Zed!")
+                        .docs_url("https://zed.dev/docs/languages/typescript")
+                }
+                Feature::LanguageRust => {
+                    FeatureUpsell::new(telemetry, "Rust support is built-in to Zed!")
+                        .docs_url("https://zed.dev/docs/languages/rust")
+                }
                 Feature::LanguageTypescript => {
-                    FeatureUpsell::new("Typescript support is built-in to Zed!")
+                    FeatureUpsell::new(telemetry, "Typescript support is built-in to Zed!")
                         .docs_url("https://zed.dev/docs/languages/typescript")
                 }
             };

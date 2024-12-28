@@ -12,7 +12,7 @@ use ui::{prelude::*, ListItem, ViewContext};
 use workspace::Workspace;
 
 use crate::context::ContextKind;
-use crate::context_picker::{ConfirmBehavior, ContextPicker};
+use crate::context_picker::ContextPicker;
 use crate::context_store::ContextStore;
 
 pub struct FetchContextPicker {
@@ -24,15 +24,9 @@ impl FetchContextPicker {
         context_picker: WeakView<ContextPicker>,
         workspace: WeakView<Workspace>,
         context_store: WeakModel<ContextStore>,
-        confirm_behavior: ConfirmBehavior,
         cx: &mut ViewContext<Self>,
     ) -> Self {
-        let delegate = FetchContextPickerDelegate::new(
-            context_picker,
-            workspace,
-            context_store,
-            confirm_behavior,
-        );
+        let delegate = FetchContextPickerDelegate::new(context_picker, workspace, context_store);
         let picker = cx.new_view(|cx| Picker::uniform_list(delegate, cx));
 
         Self { picker }
@@ -62,7 +56,6 @@ pub struct FetchContextPickerDelegate {
     context_picker: WeakView<ContextPicker>,
     workspace: WeakView<Workspace>,
     context_store: WeakModel<ContextStore>,
-    confirm_behavior: ConfirmBehavior,
     url: String,
 }
 
@@ -71,13 +64,11 @@ impl FetchContextPickerDelegate {
         context_picker: WeakView<ContextPicker>,
         workspace: WeakView<Workspace>,
         context_store: WeakModel<ContextStore>,
-        confirm_behavior: ConfirmBehavior,
     ) -> Self {
         FetchContextPickerDelegate {
             context_picker,
             workspace,
             context_store,
-            confirm_behavior,
             url: String::new(),
         }
     }
@@ -193,7 +184,6 @@ impl PickerDelegate for FetchContextPickerDelegate {
 
         let http_client = workspace.read(cx).client().http_client().clone();
         let url = self.url.clone();
-        let confirm_behavior = self.confirm_behavior;
         cx.spawn(|this, mut cx| async move {
             let text = Self::build_message(http_client, &url).await?;
 
@@ -202,14 +192,7 @@ impl PickerDelegate for FetchContextPickerDelegate {
                     .context_store
                     .update(cx, |context_store, _cx| {
                         context_store.insert_context(ContextKind::FetchedUrl, url, text);
-                    })?;
-
-                match confirm_behavior {
-                    ConfirmBehavior::KeepOpen => {}
-                    ConfirmBehavior::Close => this.delegate.dismissed(cx),
-                }
-
-                anyhow::Ok(())
+                    })
             })??;
 
             anyhow::Ok(())

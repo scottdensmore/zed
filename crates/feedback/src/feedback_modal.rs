@@ -1,8 +1,4 @@
-use std::{
-    ops::RangeInclusive,
-    sync::{Arc, LazyLock},
-    time::Duration,
-};
+use std::{ops::RangeInclusive, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, bail};
 use bitflags::bitflags;
@@ -38,8 +34,7 @@ const DEV_MODE: bool = true;
 const DEV_MODE: bool = false;
 
 const DATABASE_KEY_NAME: &str = "email_address";
-static EMAIL_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap());
+const EMAIL_REGEX: &str = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b";
 const FEEDBACK_CHAR_LIMIT: RangeInclusive<i32> = 10..=5000;
 const FEEDBACK_SUBMISSION_ERROR_TEXT: &str =
     "Feedback failed to submit, see error log for details.";
@@ -325,7 +320,7 @@ impl FeedbackModal {
         let mut invalid_state_flags = InvalidStateFlags::empty();
 
         let valid_email_address = match self.email_address_editor.read(cx).text_option(cx) {
-            Some(email_address) => EMAIL_REGEX.is_match(&email_address),
+            Some(email_address) => Regex::new(EMAIL_REGEX).unwrap().is_match(&email_address),
             None => true,
         };
 

@@ -1,7 +1,4 @@
-use gpui::{
-    div, prelude::*, px, rgb, size, App, AppContext, Bounds, SharedString, ViewContext,
-    WindowBounds, WindowOptions,
-};
+use gpui::*;
 
 struct HelloWorld {
     text: SharedString,
@@ -14,7 +11,7 @@ impl Render for HelloWorld {
             .flex_col()
             .gap_3()
             .bg(rgb(0x505050))
-            .size(px(500.0))
+            .size(Length::Definite(Pixels(500.0).into()))
             .justify_center()
             .items_center()
             .shadow_lg()

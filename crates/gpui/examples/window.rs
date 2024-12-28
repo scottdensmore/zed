@@ -1,7 +1,5 @@
-use gpui::{
-    div, prelude::*, px, rgb, size, App, AppContext, Bounds, SharedString, Timer, ViewContext,
-    WindowBounds, WindowContext, WindowKind, WindowOptions,
-};
+use gpui::*;
+use prelude::FluentBuilder as _;
 
 struct SubWindow {
     custom_titlebar: bool,

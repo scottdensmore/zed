@@ -1,10 +1,6 @@
 use std::{fs, path::PathBuf, time::Duration};
 
-use anyhow::Result;
-use gpui::{
-    div, hsla, img, point, prelude::*, px, rgb, size, svg, App, AppContext, AssetSource, Bounds,
-    BoxShadow, ClickEvent, SharedString, Task, Timer, ViewContext, WindowBounds, WindowOptions,
-};
+use gpui::*;
 
 struct Assets {
     base: PathBuf,
@@ -80,7 +76,7 @@ impl Render for HelloWorld {
             .flex()
             .flex_row()
             .size_full()
-            .bg(rgb(0xe0e0e0))
+            .bg(rgb(0xE0E0E0))
             .text_xl()
             .child(
                 div()
