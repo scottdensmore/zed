@@ -464,8 +464,8 @@ impl RateCompletionModal {
                                         .icon_position(IconPosition::Start)
                                         .disabled(rated || feedback_empty)
                                         .when(feedback_empty, |this| {
-                                            this.tooltip(|cx| {
-                                                Tooltip::text("Explain what's bad about it before reporting it", cx)
+                                            this.tooltip(|window, cx| {
+                                                Tooltip::text("Explain what's bad about it before reporting it", window, cx)
                                             })
                                         })
                                         .on_click(cx.listener(move |this, _, cx| {

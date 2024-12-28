@@ -7,7 +7,7 @@ use settings::SettingsStore;
 use std::sync::Arc;
 use theme::LoadThemes;
 use ui::prelude::*;
-use ui::{div, WindowContext};
+use ui::{div, AppContext, Window};
 
 const MARKDOWN_EXAMPLE: &str = r#"
 # Markdown Example Document
@@ -112,8 +112,8 @@ pub fn main() {
         Assets.load_fonts(cx).unwrap();
 
         cx.activate(true);
-        cx.open_window(WindowOptions::default(), |cx| {
-            cx.new_view(|cx| {
+        cx.open_window(WindowOptions::default(), |window, cx| {
+            window.new_view(cx, |cx| {
                 let markdown_style = MarkdownStyle {
                     base_text_style: gpui::TextStyle {
                         font_family: "Zed Plex Sans".into(),
@@ -175,10 +175,12 @@ impl MarkdownExample {
         text: String,
         style: MarkdownStyle,
         language_registry: Arc<LanguageRegistry>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Self {
-        let markdown =
-            cx.new_view(|cx| Markdown::new(text, style, Some(language_registry), None, cx));
+        let markdown = window.new_view(cx, |cx| {
+            Markdown::new(text, style, Some(language_registry), None, cx)
+        });
         Self { markdown }
     }
 }

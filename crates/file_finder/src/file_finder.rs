@@ -954,10 +954,10 @@ impl FileFinderDelegate {
         0
     }
 
-    fn key_context(&self, cx: &WindowContext) -> KeyContext {
+    fn key_context(&self, window: &Window, cx: &AppContext) -> KeyContext {
         let mut key_context = KeyContext::new_with_defaults();
         key_context.add("FileFinder");
-        if self.popover_menu_handle.is_focused(cx) {
+        if self.popover_menu_handle.is_focused(window, cx) {
             key_context.add("menu_open");
         }
         key_context
@@ -967,7 +967,7 @@ impl FileFinderDelegate {
 impl PickerDelegate for FileFinderDelegate {
     type ListItem = ListItem;
 
-    fn placeholder_text(&self, _cx: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, _window: &mut Window, _cx: &mut AppContext) -> Arc<str> {
         "Search project files...".into()
     }
 
@@ -1256,7 +1256,9 @@ impl PickerDelegate for FileFinderDelegate {
                 .child(
                     Button::new("open-selection", "Open")
                         .key_binding(KeyBinding::for_action(&menu::Confirm, cx))
-                        .on_click(|_, cx| cx.dispatch_action(menu::Confirm.boxed_clone())),
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(menu::Confirm.boxed_clone(), cx)
+                        }),
                 )
                 .child(
                     PopoverMenu::new("menu-popover")
@@ -1269,8 +1271,8 @@ impl PickerDelegate for FileFinderDelegate {
                                 .key_binding(KeyBinding::for_action_in(&ToggleMenu, &context, cx)),
                         )
                         .menu({
-                            move |cx| {
-                                Some(ContextMenu::build(cx, {
+                            move |window, cx| {
+                                Some(ContextMenu::build(window, cx, {
                                     let context = context.clone();
                                     move |menu, _| {
                                         menu.context(context)

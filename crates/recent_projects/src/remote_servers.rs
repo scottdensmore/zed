@@ -61,8 +61,8 @@ struct CreateRemoteServer {
 }
 
 impl CreateRemoteServer {
-    fn new(cx: &mut WindowContext) -> Self {
-        let address_editor = cx.new_view(Editor::single_line);
+    fn new(window: &mut Window, cx: &mut AppContext) -> Self {
+        let address_editor = window.new_view(cx, Editor::single_line);
         address_editor.update(cx, |this, cx| {
             this.focus_handle(cx).focus(cx);
         });
@@ -88,10 +88,10 @@ struct EditNicknameState {
 }
 
 impl EditNicknameState {
-    fn new(index: usize, cx: &mut WindowContext) -> Self {
+    fn new(index: usize, window: &mut Window, cx: &mut AppContext) -> Self {
         let this = Self {
             index,
-            editor: cx.new_view(Editor::single_line),
+            editor: window.new_view(cx, Editor::single_line),
         };
         let starting_text = SshSettings::get_global(cx)
             .ssh_connections()
@@ -104,7 +104,7 @@ impl EditNicknameState {
                 this.set_text(starting_text, cx);
             }
         });
-        this.editor.focus_handle(cx).focus(cx);
+        this.editor.focus_handle(cx).focus(window, cx);
         this
     }
 }
@@ -156,11 +156,11 @@ impl ProjectPicker {
                         .update(&mut cx, |workspace, _| workspace.app_state().clone())
                         .ok()?;
                     let options = cx
-                        .update(|cx| (app_state.build_window_options)(None, cx))
+                        .update(|_window, cx| (app_state.build_window_options)(None, cx))
                         .log_err()?;
 
-                    cx.open_window(options, |cx| {
-                        cx.activate_window();
+                    cx.open_window(options, |window, cx| {
+                        window.activate_window(cx);
 
                         let fs = app_state.fs.clone();
                         update_settings_file::<SshSettings>(fs, cx, {
@@ -187,19 +187,16 @@ impl ProjectPicker {
                                 })
                             })
                             .collect::<Vec<_>>();
-                        cx.spawn(|_| async move {
-                            for task in tasks {
-                                task.await?;
-                            }
-                            Ok(())
-                        })
-                        .detach_and_prompt_err(
-                            "Failed to open path",
-                            cx,
-                            |_, _| None,
-                        );
+                        window
+                            .spawn(cx, |_| async move {
+                                for task in tasks {
+                                    task.await?;
+                                }
+                                Ok(())
+                            })
+                            .detach_and_prompt_err("Failed to open path", window, cx, |_, _| None);
 
-                        cx.new_view(|cx| {
+                        window.new_view(cx, |cx| {
                             let workspace =
                                 Workspace::new(None, project.clone(), app_state.clone(), cx);
 
@@ -264,19 +261,19 @@ struct DefaultState {
     servers: Vec<ProjectEntry>,
 }
 impl DefaultState {
-    fn new(cx: &WindowContext) -> Self {
+    fn new(window: &Window, cx: &AppContext) -> Self {
         let handle = ScrollHandle::new();
         let scrollbar = ScrollbarState::new(handle.clone());
-        let add_new_server = NavigableEntry::new(&handle, cx);
+        let add_new_server = NavigableEntry::new(&handle, window, cx);
         let servers = SshSettings::get_global(cx)
             .ssh_connections()
             .map(|connection| {
-                let open_folder = NavigableEntry::new(&handle, cx);
-                let configure = NavigableEntry::new(&handle, cx);
+                let open_folder = NavigableEntry::new(&handle, window, cx);
+                let configure = NavigableEntry::new(&handle, window, cx);
                 let projects = connection
                     .projects
                     .iter()
-                    .map(|project| (NavigableEntry::new(&handle, cx), project.clone()))
+                    .map(|project| (NavigableEntry::new(&handle, window, cx), project.clone()))
                     .collect();
                 ProjectEntry {
                     open_folder,
@@ -309,8 +306,8 @@ enum Mode {
 }
 
 impl Mode {
-    fn default_mode(cx: &WindowContext) -> Self {
-        Self::Default(DefaultState::new(cx))
+    fn default_mode(window: &Window, cx: &AppContext) -> Self {
+        Self::Default(DefaultState::new(window, cx))
     }
 }
 impl RemoteServerProjects {
@@ -321,7 +318,7 @@ impl RemoteServerProjects {
         });
     }
 
-    pub fn open(workspace: View<Workspace>, cx: &mut WindowContext) {
+    pub fn open(workspace: View<Workspace>, _window: &mut Window, cx: &mut AppContext) {
         workspace.update(cx, |workspace, cx| {
             let handle = cx.view().downgrade();
             workspace.toggle_modal(cx, |cx| Self::new(cx, handle))
@@ -792,7 +789,9 @@ impl RemoteServerProjects {
                                     .icon_size(IconSize::Small)
                                     .shape(IconButtonShape::Square)
                                     .size(ButtonSize::Large)
-                                    .tooltip(|cx| Tooltip::text("Delete Remote Project", cx))
+                                    .tooltip(|window, cx| {
+                                        Tooltip::text("Delete Remote Project", window, cx)
+                                    })
                                     .on_click(cx.listener(move |this, _, cx| {
                                         this.delete_ssh_project(server_ix, &project, cx)
                                     }))
@@ -927,7 +926,7 @@ impl RemoteServerProjects {
                                             .size(ButtonSize::None)
                                             .color(Color::Accent)
                                             .style(ButtonStyle::Transparent)
-                                            .on_click(|_, cx| {
+                                            .on_click(|_, _window, cx| {
                                                 cx.open_url(
                                                     "https://zed.dev/docs/remote-development",
                                                 );
@@ -1003,7 +1002,8 @@ impl RemoteServerProjects {
                             fn callback(
                                 workspace: WeakView<Workspace>,
                                 connection_string: SharedString,
-                                cx: &mut WindowContext,
+                                _window: &mut Window,
+                                cx: &mut AppContext,
                             ) {
                                 cx.write_to_clipboard(ClipboardItem::new_string(
                                     connection_string.to_string(),
@@ -1037,8 +1037,13 @@ impl RemoteServerProjects {
                                 .on_action({
                                     let connection_string = connection_string.clone();
                                     let workspace = self.workspace.clone();
-                                    move |_: &menu::Confirm, cx| {
-                                        callback(workspace.clone(), connection_string.clone(), cx);
+                                    move |_: &menu::Confirm, window, cx| {
+                                        callback(
+                                            workspace.clone(),
+                                            connection_string.clone(),
+                                            window,
+                                            cx,
+                                        );
                                     }
                                 })
                                 .child(
@@ -1054,10 +1059,11 @@ impl RemoteServerProjects {
                                         )
                                         .on_click({
                                             let connection_string = connection_string.clone();
-                                            move |_, cx| {
+                                            move |_, window, cx| {
                                                 callback(
                                                     workspace.clone(),
                                                     connection_string.clone(),
+                                                    window,
                                                     cx,
                                                 );
                                             }
@@ -1069,35 +1075,38 @@ impl RemoteServerProjects {
                                 remote_servers: View<RemoteServerProjects>,
                                 index: usize,
                                 connection_string: SharedString,
-                                cx: &mut WindowContext,
+                                window: &mut Window,
+                                cx: &mut AppContext,
                             ) {
                                 let prompt_message =
                                     format!("Remove server `{}`?", connection_string);
 
-                                let confirmation = cx.prompt(
+                                let confirmation = window.prompt(
                                     PromptLevel::Warning,
                                     &prompt_message,
                                     None,
                                     &["Yes, remove it", "No, keep it"],
+                                    cx,
                                 );
 
-                                cx.spawn(|mut cx| async move {
-                                    if confirmation.await.ok() == Some(0) {
-                                        remote_servers
-                                            .update(&mut cx, |this, cx| {
-                                                this.delete_ssh_server(index, cx);
-                                            })
-                                            .ok();
-                                        remote_servers
-                                            .update(&mut cx, |this, cx| {
-                                                this.mode = Mode::default_mode(cx);
-                                                cx.notify();
-                                            })
-                                            .ok();
-                                    }
-                                    anyhow::Ok(())
-                                })
-                                .detach_and_log_err(cx);
+                                window
+                                    .spawn(cx, |mut cx| async move {
+                                        if confirmation.await.ok() == Some(0) {
+                                            remote_servers
+                                                .update(&mut cx, |this, cx| {
+                                                    this.delete_ssh_server(index, cx);
+                                                })
+                                                .ok();
+                                            remote_servers
+                                                .update(&mut cx, |this, cx| {
+                                                    this.mode = Mode::default_mode(cx);
+                                                    cx.notify();
+                                                })
+                                                .ok();
+                                        }
+                                        anyhow::Ok(())
+                                    })
+                                    .detach_and_log_err(cx);
                             }
                             div()
                                 .id("ssh-options-copy-server-address")
@@ -1309,16 +1318,17 @@ impl RemoteServerProjects {
                         .child(ListSeparator)
                         .child(
                             canvas(
-                                |bounds, cx| {
+                                |bounds, window, cx| {
                                     modal_section.prepaint_as_root(
                                         bounds.origin,
                                         bounds.size.into(),
+                                        window,
                                         cx,
                                     );
                                     modal_section
                                 },
-                                |_, mut modal_section, cx| {
-                                    modal_section.paint(cx);
+                                |_, mut modal_section, window, cx| {
+                                    modal_section.paint(window, cx);
                                 },
                             )
                             .size_full(),
@@ -1340,7 +1350,7 @@ impl RemoteServerProjects {
     }
 }
 
-fn get_text(element: &View<Editor>, cx: &mut WindowContext) -> String {
+fn get_text(element: &View<Editor>, _window: &mut Window, cx: &mut AppContext) -> String {
     element.read(cx).text(cx).trim().to_string()
 }
 

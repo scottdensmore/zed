@@ -5,7 +5,7 @@ use assistant_slash_command::{
 };
 use feature_flags::FeatureFlag;
 use futures::StreamExt;
-use gpui::{AppContext, AsyncAppContext, AsyncWindowContext, Task, WeakView, WindowContext};
+use gpui::{AppContext, AsyncAppContext, AsyncWindowContext, Task, WeakView, Window};
 use language::{CodeLabel, LspAdapterDelegate};
 use language_model::{
     LanguageModelCompletionEvent, LanguageModelRegistry, LanguageModelRequest,
@@ -54,7 +54,8 @@ impl SlashCommand for AutoCommand {
         _arguments: &[String],
         _cancel: Arc<AtomicBool>,
         workspace: Option<WeakView<Workspace>>,
-        cx: &mut WindowContext,
+        _window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<Result<Vec<ArgumentCompletion>>> {
         // There's no autocomplete for a prompt, since it's arbitrary text.
         // However, we can use this opportunity to kick off a drain of the backlog.
@@ -68,12 +69,13 @@ impl SlashCommand for AutoCommand {
         };
 
         let project = workspace.read(cx).project().clone();
-        let Some(project_index) =
-            cx.update_global(|index: &mut SemanticDb, cx| index.project_index(project, cx))
+        let Some(project_index) = cx
+            .update_global(|index: &mut SemanticDb, _window, cx| index.project_index(project, cx))
         else {
             return Task::ready(Err(anyhow!("No project indexer, cannot use /auto")));
         };
 
+        // REFACTOR ERROR Unexpected reference parents: let_declaration block function_item
         let cx: &mut AppContext = cx;
 
         cx.spawn(|cx: gpui::AsyncAppContext| async move {
@@ -98,7 +100,8 @@ impl SlashCommand for AutoCommand {
         _context_buffer: language::BufferSnapshot,
         workspace: WeakView<Workspace>,
         _delegate: Option<Arc<dyn LspAdapterDelegate>>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<SlashCommandResult> {
         let Some(workspace) = workspace.upgrade() else {
             return Task::ready(Err(anyhow::anyhow!("workspace was dropped")));
@@ -109,13 +112,13 @@ impl SlashCommand for AutoCommand {
         let argument = arguments.join(" ");
         let original_prompt = argument.to_string();
         let project = workspace.read(cx).project().clone();
-        let Some(project_index) =
-            cx.update_global(|index: &mut SemanticDb, cx| index.project_index(project, cx))
+        let Some(project_index) = cx
+            .update_global(|index: &mut SemanticDb, _window, cx| index.project_index(project, cx))
         else {
             return Task::ready(Err(anyhow!("no project indexer")));
         };
 
-        let task = cx.spawn(|cx: AsyncWindowContext| async move {
+        let task = window.spawn(cx, |cx: AsyncWindowContext| async move {
             let summaries = project_index
                 .read_with(&cx, |project_index, cx| project_index.all_summaries(cx))?
                 .await?;

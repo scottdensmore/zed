@@ -5,10 +5,10 @@ use crate::markdown_elements::{
     ParsedMarkdownTableAlignment, ParsedMarkdownTableRow,
 };
 use gpui::{
-    div, img, px, rems, AbsoluteLength, AnyElement, ClipboardItem, DefiniteLength, Div, Element,
-    ElementId, HighlightStyle, Hsla, ImageSource, InteractiveText, IntoElement, Keystroke, Length,
-    Modifiers, ParentElement, Render, Resource, SharedString, Styled, StyledText, TextStyle, View,
-    WeakView, WindowContext,
+    div, img, px, rems, AbsoluteLength, AnyElement, AppContext, ClipboardItem, DefiniteLength, Div,
+    Element, ElementId, HighlightStyle, Hsla, ImageSource, InteractiveText, IntoElement, Keystroke,
+    Length, Modifiers, ParentElement, Render, Resource, SharedString, Styled, StyledText,
+    TextStyle, View, WeakView, Window,
 };
 use settings::Settings;
 use std::{
@@ -25,7 +25,7 @@ use ui::{
 };
 use workspace::Workspace;
 
-type CheckboxClickedCallback = Arc<Box<dyn Fn(bool, Range<usize>, &mut WindowContext)>>;
+type CheckboxClickedCallback = Arc<Box<dyn Fn(bool, Range<usize>, &mut Window, &mut AppContext)>>;
 
 #[derive(Clone)]
 pub struct RenderContext {
@@ -45,12 +45,16 @@ pub struct RenderContext {
 }
 
 impl RenderContext {
-    pub fn new(workspace: Option<WeakView<Workspace>>, cx: &WindowContext) -> RenderContext {
+    pub fn new(
+        workspace: Option<WeakView<Workspace>>,
+        window: &Window,
+        cx: &AppContext,
+    ) -> RenderContext {
         let theme = cx.theme().clone();
 
         let settings = ThemeSettings::get_global(cx);
         let buffer_font_family = settings.buffer_font.family.clone();
-        let mut buffer_text_style = cx.text_style();
+        let mut buffer_text_style = window.text_style(cx);
         buffer_text_style.font_family = buffer_font_family.clone();
 
         RenderContext {
@@ -59,7 +63,7 @@ impl RenderContext {
             indent: 0,
             buffer_font_family,
             buffer_text_style,
-            text_style: cx.text_style(),
+            text_style: window.text_style(cx),
             syntax_theme: theme.syntax().clone(),
             border_color: theme.colors().border,
             text_color: theme.colors().text,
@@ -72,7 +76,7 @@ impl RenderContext {
 
     pub fn with_checkbox_clicked_callback(
         mut self,
-        callback: impl Fn(bool, Range<usize>, &mut WindowContext) + 'static,
+        callback: impl Fn(bool, Range<usize>, &mut Window, &mut AppContext) + 'static,
     ) -> Self {
         self.checkbox_clicked_callback = Some(Arc::new(Box::new(callback)));
         self
@@ -109,9 +113,10 @@ impl RenderContext {
 pub fn render_parsed_markdown(
     parsed: &ParsedMarkdown,
     workspace: Option<WeakView<Workspace>>,
-    cx: &WindowContext,
+    window: &Window,
+    cx: &AppContext,
 ) -> Vec<AnyElement> {
-    let mut cx = RenderContext::new(workspace, cx);
+    let mut cx = RenderContext::new(workspace, window, cx);
     let mut elements = Vec::new();
 
     for child in &parsed.children {
@@ -190,15 +195,15 @@ fn render_markdown_list_item(
                     |this, callback| {
                         this.on_click({
                             let range = range.clone();
-                            move |selection, cx| {
+                            move |selection, window, cx| {
                                 let checked = match selection {
                                     ToggleState::Selected => true,
                                     ToggleState::Unselected => false,
                                     _ => return,
                                 };
 
-                                if cx.modifiers().secondary() {
-                                    callback(checked, range.clone(), cx);
+                                if window.modifiers(cx).secondary() {
+                                    callback(checked, range.clone(), window, cx);
                                 }
                             }
                         })
@@ -206,8 +211,8 @@ fn render_markdown_list_item(
                 ),
             )
             .hover(|s| s.cursor_pointer())
-            .tooltip(|cx| {
-                InteractiveMarkdownElementTooltip::new(None, "toggle checkbox", cx).into()
+            .tooltip(|window, cx| {
+                InteractiveMarkdownElementTooltip::new(None, "toggle checkbox", window, cx).into()
             })
             .into_any_element(),
     };
@@ -381,11 +386,11 @@ fn render_markdown_code_block(
         .icon_size(IconSize::Small)
         .on_click({
             let contents = parsed.contents.clone();
-            move |_, cx| {
+            move |_, _window, cx| {
                 cx.write_to_clipboard(ClipboardItem::new_string(contents.to_string()));
             }
         })
-        .tooltip(|cx| Tooltip::text("Copy code block", cx))
+        .tooltip(|window, cx| Tooltip::text("Copy code block", window, cx))
         .visible_on_hover("markdown-block");
 
     cx.with_common_p(div())
@@ -468,10 +473,14 @@ fn render_markdown_text(parsed_new: &MarkdownParagraph, cx: &mut RenderContext) 
                         .tooltip({
                             let links = links.clone();
                             let link_ranges = link_ranges.clone();
-                            move |idx, cx| {
+                            move |idx, window, cx| {
                                 for (ix, range) in link_ranges.iter().enumerate() {
                                     if range.contains(&idx) {
-                                        return Some(LinkPreview::new(&links[ix].to_string(), cx));
+                                        return Some(LinkPreview::new(
+                                            &links[ix].to_string(),
+                                            window,
+                                            cx,
+                                        ));
                                     }
                                 }
                                 None
@@ -479,6 +488,7 @@ fn render_markdown_text(parsed_new: &MarkdownParagraph, cx: &mut RenderContext) 
                         })
                         .on_click(
                             link_ranges,
+                            // REFACTOR ERROR Unexpected name: window_cx
                             move |clicked_range_ix, window_cx| match &links[clicked_range_ix] {
                                 Link::Web { url } => window_cx.open_url(url),
                                 Link::Path { path, .. } => {
@@ -516,10 +526,11 @@ fn render_markdown_text(parsed_new: &MarkdownParagraph, cx: &mut RenderContext) 
                     }))
                     .tooltip({
                         let link = image.link.clone();
-                        move |cx| {
+                        move |window, cx| {
                             InteractiveMarkdownElementTooltip::new(
                                 Some(link.to_string()),
                                 "open image",
+                                window,
                                 cx,
                             )
                             .into()
@@ -528,8 +539,8 @@ fn render_markdown_text(parsed_new: &MarkdownParagraph, cx: &mut RenderContext) 
                     .on_click({
                         let workspace = workspace_clone.clone();
                         let link = image.link.clone();
-                        move |_, cx| {
-                            if cx.modifiers().secondary() {
+                        move |_, window, cx| {
+                            if window.modifiers(cx).secondary() {
                                 match &link {
                                     Link::Web { url } => cx.open_url(url),
                                     Link::Path { path, .. } => {
@@ -568,11 +579,12 @@ impl InteractiveMarkdownElementTooltip {
     pub fn new(
         tooltip_text: Option<String>,
         action_text: &str,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> View<Self> {
         let tooltip_text = tooltip_text.map(|t| util::truncate_and_trailoff(&t, 50).into());
 
-        cx.new_view(|_| Self {
+        window.new_view(cx, |_| Self {
             tooltip_text,
             action_text: action_text.to_string(),
         })

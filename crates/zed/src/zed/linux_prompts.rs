@@ -1,8 +1,7 @@
 use gpui::{
     div, AppContext, EventEmitter, FocusHandle, FocusableView, FontWeight, InteractiveElement,
     IntoElement, ParentElement, PromptHandle, PromptLevel, PromptResponse, Refineable, Render,
-    RenderablePromptHandle, Styled, TextStyleRefinement, View, ViewContext, VisualContext,
-    WindowContext,
+    RenderablePromptHandle, Styled, TextStyleRefinement, View, ViewContext, VisualContext, Window,
 };
 use markdown::{Markdown, MarkdownStyle};
 use settings::Settings;
@@ -24,9 +23,10 @@ pub fn fallback_prompt_renderer(
     detail: Option<&str>,
     actions: &[&str],
     handle: PromptHandle,
-    cx: &mut WindowContext,
+    window: &mut Window,
+    cx: &mut AppContext,
 ) -> RenderablePromptHandle {
-    let renderer = cx.new_view({
+    let renderer = window.new_view(cx, {
         |cx| FallbackPromptRenderer {
             _level: level,
             message: message.to_string(),
@@ -54,7 +54,7 @@ pub fn fallback_prompt_renderer(
         }
     });
 
-    handle.with_view(renderer, cx)
+    handle.with_view(renderer, window, cx)
 }
 
 /// The default GPUI fallback for rendering prompts, when the platform doesn't support it.

@@ -14,53 +14,64 @@ pub struct Tooltip {
 }
 
 impl Tooltip {
-    pub fn text(title: impl Into<SharedString>, cx: &mut WindowContext) -> AnyView {
-        cx.new_view(|_cx| Self {
-            title: title.into(),
-            meta: None,
-            key_binding: None,
-        })
-        .into()
+    pub fn text(
+        title: impl Into<SharedString>,
+        window: &mut Window,
+        cx: &mut AppContext,
+    ) -> AnyView {
+        window
+            .new_view(cx, |_cx| Self {
+                title: title.into(),
+                meta: None,
+                key_binding: None,
+            })
+            .into()
     }
 
     pub fn for_action(
         title: impl Into<SharedString>,
         action: &dyn Action,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> AnyView {
-        cx.new_view(|cx| Self {
-            title: title.into(),
-            meta: None,
-            key_binding: KeyBinding::for_action(action, cx),
-        })
-        .into()
+        window
+            .new_view(cx, |cx| Self {
+                title: title.into(),
+                meta: None,
+                key_binding: KeyBinding::for_action(action, cx),
+            })
+            .into()
     }
 
     pub fn for_action_in(
         title: impl Into<SharedString>,
         action: &dyn Action,
         focus_handle: &FocusHandle,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> AnyView {
-        cx.new_view(|cx| Self {
-            title: title.into(),
-            meta: None,
-            key_binding: KeyBinding::for_action_in(action, focus_handle, cx),
-        })
-        .into()
+        window
+            .new_view(cx, |cx| Self {
+                title: title.into(),
+                meta: None,
+                key_binding: KeyBinding::for_action_in(action, focus_handle, cx),
+            })
+            .into()
     }
     pub fn with_meta(
         title: impl Into<SharedString>,
         action: Option<&dyn Action>,
         meta: impl Into<SharedString>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> AnyView {
-        cx.new_view(|cx| Self {
-            title: title.into(),
-            meta: Some(meta.into()),
-            key_binding: action.and_then(|action| KeyBinding::for_action(action, cx)),
-        })
-        .into()
+        window
+            .new_view(cx, |cx| Self {
+                title: title.into(),
+                meta: Some(meta.into()),
+                key_binding: action.and_then(|action| KeyBinding::for_action(action, cx)),
+            })
+            .into()
     }
 
     pub fn new(title: impl Into<SharedString>) -> Self {
@@ -124,7 +135,7 @@ pub struct LinkPreview {
 }
 
 impl LinkPreview {
-    pub fn new(url: &str, cx: &mut WindowContext) -> AnyView {
+    pub fn new(url: &str, window: &mut Window, cx: &mut AppContext) -> AnyView {
         let mut wrapped_url = String::new();
         for (i, ch) in url.chars().enumerate() {
             if i == 500 {
@@ -136,10 +147,11 @@ impl LinkPreview {
             }
             wrapped_url.push(ch);
         }
-        cx.new_view(|_cx| LinkPreview {
-            link: wrapped_url.into(),
-        })
-        .into()
+        window
+            .new_view(cx, |_cx| LinkPreview {
+                link: wrapped_url.into(),
+            })
+            .into()
     }
 }
 

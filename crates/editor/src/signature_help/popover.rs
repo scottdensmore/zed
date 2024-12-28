@@ -34,8 +34,8 @@ impl SignatureHelpPopover {
             .overflow_y_scroll()
             .max_w(max_size.width)
             .max_h(max_size.height)
-            .on_mouse_move(|_, cx| cx.stop_propagation())
-            .on_mouse_down(MouseButton::Left, |_, cx| cx.stop_propagation())
+            .on_mouse_move(|_, _window, cx| cx.stop_propagation())
+            .on_mouse_down(MouseButton::Left, |_, _window, cx| cx.stop_propagation())
             .child(div().p_2().child(crate::render_parsed_markdown(
                 "signature_help_popover_content",
                 &self.parsed_content,

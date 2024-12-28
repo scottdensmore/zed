@@ -201,7 +201,7 @@ impl PickerDelegate for SavedContextPickerDelegate {
         self.selected_index = ix;
     }
 
-    fn placeholder_text(&self, _cx: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, _window: &mut Window, _cx: &mut AppContext) -> Arc<str> {
         "Search...".into()
     }
 
@@ -432,11 +432,12 @@ impl AssistantPanel {
                     }))
                     .tooltip({
                         let focus_handle = focus_handle.clone();
-                        move |cx| {
+                        move |window, cx| {
                             Tooltip::for_action_in(
                                 "Open History",
                                 &DeployHistory,
                                 &focus_handle,
+                                window,
                                 cx,
                             )
                         }
@@ -446,46 +447,53 @@ impl AssistantPanel {
                             .map_or(false, |item| item.downcast::<ContextHistory>().is_some()),
                     );
                 let _pane = cx.view().clone();
-                let right_children = h_flex()
-                    .gap(DynamicSpacing::Base02.rems(cx))
-                    .child(
-                        IconButton::new("new-chat", IconName::Plus)
-                            .icon_size(IconSize::Small)
-                            .on_click(
-                                cx.listener(|_, _, cx| {
+                let right_children =
+                    h_flex()
+                        .gap(DynamicSpacing::Base02.rems(cx))
+                        .child(
+                            IconButton::new("new-chat", IconName::Plus)
+                                .icon_size(IconSize::Small)
+                                .on_click(cx.listener(|_, _, cx| {
                                     cx.dispatch_action(NewContext.boxed_clone())
-                                }),
-                            )
-                            .tooltip(move |cx| {
-                                Tooltip::for_action_in("New Chat", &NewContext, &focus_handle, cx)
-                            }),
-                    )
-                    .child(
-                        PopoverMenu::new("assistant-panel-popover-menu")
-                            .trigger(
-                                IconButton::new("menu", IconName::EllipsisVertical)
-                                    .icon_size(IconSize::Small)
-                                    .tooltip(|cx| Tooltip::text("Toggle Assistant Menu", cx)),
-                            )
-                            .menu(move |cx| {
-                                let zoom_label = if _pane.read(cx).is_zoomed() {
-                                    "Zoom Out"
-                                } else {
-                                    "Zoom In"
-                                };
-                                let focus_handle = _pane.focus_handle(cx);
-                                Some(ContextMenu::build(cx, move |menu, _| {
-                                    menu.context(focus_handle.clone())
-                                        .action("New Chat", Box::new(NewContext))
-                                        .action("History", Box::new(DeployHistory))
-                                        .action("Prompt Library", Box::new(DeployPromptLibrary))
-                                        .action("Configure", Box::new(ShowConfiguration))
-                                        .action(zoom_label, Box::new(ToggleZoom))
                                 }))
-                            }),
-                    )
-                    .into_any_element()
-                    .into();
+                                .tooltip(move |window, cx| {
+                                    Tooltip::for_action_in(
+                                        "New Chat",
+                                        &NewContext,
+                                        &focus_handle,
+                                        window,
+                                        cx,
+                                    )
+                                }),
+                        )
+                        .child(
+                            PopoverMenu::new("assistant-panel-popover-menu")
+                                .trigger(
+                                    IconButton::new("menu", IconName::EllipsisVertical)
+                                        .icon_size(IconSize::Small)
+                                        .tooltip(|window, cx| {
+                                            Tooltip::text("Toggle Assistant Menu", window, cx)
+                                        }),
+                                )
+                                .menu(move |window, cx| {
+                                    let zoom_label = if _pane.read(cx).is_zoomed() {
+                                        "Zoom Out"
+                                    } else {
+                                        "Zoom In"
+                                    };
+                                    let focus_handle = _pane.focus_handle(cx);
+                                    Some(ContextMenu::build(window, cx, move |menu, _| {
+                                        menu.context(focus_handle.clone())
+                                            .action("New Chat", Box::new(NewContext))
+                                            .action("History", Box::new(DeployHistory))
+                                            .action("Prompt Library", Box::new(DeployPromptLibrary))
+                                            .action("Configure", Box::new(ShowConfiguration))
+                                            .action(zoom_label, Box::new(ToggleZoom))
+                                    }))
+                                }),
+                        )
+                        .into_any_element()
+                        .into();
 
                 (Some(left_children.into_any_element()), right_children)
             });
@@ -846,38 +854,42 @@ impl AssistantPanel {
                         .ok();
                     if let Some(answer) = answer {
                         if answer == 0 {
-                            cx.update(|cx| cx.dispatch_action(Box::new(ShowConfiguration)))
-                                .ok();
+                            cx.update(|window, cx| {
+                                window.dispatch_action(Box::new(ShowConfiguration), cx)
+                            })
+                            .ok();
                         }
                     }
                     return Ok(());
                 };
                 task.await?;
                 if assistant_panel.update(&mut cx, |panel, cx| panel.is_authenticated(cx))? {
-                    cx.update(|cx| match inline_assist_target {
+                    cx.update(|_window, cx| match inline_assist_target {
                         InlineAssistTarget::Editor(active_editor, include_context) => {
                             let assistant_panel = if include_context {
                                 assistant_panel.upgrade()
                             } else {
                                 None
                             };
-                            InlineAssistant::update_global(cx, |assistant, cx| {
+                            InlineAssistant::update_global(cx, |assistant, window, cx| {
                                 assistant.assist(
                                     &active_editor,
                                     Some(workspace),
                                     assistant_panel.as_ref(),
                                     initial_prompt,
+                                    window,
                                     cx,
                                 )
                             })
                         }
                         InlineAssistTarget::Terminal(active_terminal) => {
-                            TerminalInlineAssistant::update_global(cx, |assistant, cx| {
+                            TerminalInlineAssistant::update_global(cx, |assistant, window, cx| {
                                 assistant.assist(
                                     &active_terminal,
                                     Some(workspace),
                                     assistant_panel.upgrade().as_ref(),
                                     initial_prompt,
+                                    window,
                                     cx,
                                 )
                             })
@@ -898,13 +910,14 @@ impl AssistantPanel {
     fn resolve_inline_assist_target(
         workspace: &mut Workspace,
         assistant_panel: &View<AssistantPanel>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Option<InlineAssistTarget> {
-        if let Some(terminal_panel) = workspace.panel::<TerminalPanel>(cx) {
+        if let Some(terminal_panel) = workspace.panel::<TerminalPanel>(window, cx) {
             if terminal_panel
                 .read(cx)
                 .focus_handle(cx)
-                .contains_focused(cx)
+                .contains_focused(window, cx)
             {
                 if let Some(terminal_view) = terminal_panel.read(cx).pane().and_then(|pane| {
                     pane.read(cx)
@@ -921,7 +934,7 @@ impl AssistantPanel {
                 .active_context_editor(cx)
                 .and_then(|editor| {
                     let editor = &editor.read(cx).editor;
-                    if editor.read(cx).is_focused(cx) {
+                    if editor.read(cx).is_focused(window, cx) {
                         Some(editor.clone())
                     } else {
                         None
@@ -1371,7 +1384,7 @@ impl Panel for AssistantPanel {
         "AssistantPanel"
     }
 
-    fn position(&self, cx: &WindowContext) -> DockPosition {
+    fn position(&self, _window: &Window, cx: &AppContext) -> DockPosition {
         match AssistantSettings::get_global(cx).dock {
             AssistantDockPosition::Left => DockPosition::Left,
             AssistantDockPosition::Bottom => DockPosition::Bottom,
@@ -1398,9 +1411,9 @@ impl Panel for AssistantPanel {
         );
     }
 
-    fn size(&self, cx: &WindowContext) -> Pixels {
+    fn size(&self, window: &Window, cx: &AppContext) -> Pixels {
         let settings = AssistantSettings::get_global(cx);
-        match self.position(cx) {
+        match self.position(window, cx) {
             DockPosition::Left | DockPosition::Right => {
                 self.width.unwrap_or(settings.default_width)
             }
@@ -1416,7 +1429,7 @@ impl Panel for AssistantPanel {
         cx.notify();
     }
 
-    fn is_zoomed(&self, cx: &WindowContext) -> bool {
+    fn is_zoomed(&self, _window: &Window, cx: &AppContext) -> bool {
         self.pane.read(cx).is_zoomed()
     }
 
@@ -1442,7 +1455,7 @@ impl Panel for AssistantPanel {
         Some(proto::PanelId::AssistantPanel)
     }
 
-    fn icon(&self, cx: &WindowContext) -> Option<IconName> {
+    fn icon(&self, _window: &Window, cx: &AppContext) -> Option<IconName> {
         let settings = AssistantSettings::get_global(cx);
         if !settings.enabled || !settings.button {
             return None;
@@ -1451,7 +1464,7 @@ impl Panel for AssistantPanel {
         Some(IconName::ZedAssistant)
     }
 
-    fn icon_tooltip(&self, _cx: &WindowContext) -> Option<&'static str> {
+    fn icon_tooltip(&self, _window: &Window, _cx: &AppContext) -> Option<&'static str> {
         Some("Assistant Panel")
     }
 
@@ -1721,7 +1734,7 @@ impl ContextEditor {
         });
     }
 
-    fn cursors(&self, cx: &mut WindowContext) -> Vec<usize> {
+    fn cursors(&self, _window: &mut Window, cx: &mut AppContext) -> Vec<usize> {
         let selections = self
             .editor
             .update(cx, |editor, cx| editor.selections.all::<usize>(cx));
@@ -1909,7 +1922,9 @@ impl ContextEditor {
                                 ..Default::default()
                             };
                             let render_trailer =
-                                move |_row, _unfold, _cx: &mut WindowContext| Empty.into_any();
+                                move |_row, _unfold, _window: &mut Window, _cx: &mut AppContext| {
+                                    Empty.into_any()
+                                };
 
                             let start = buffer
                                 .anchor_in_excerpt(excerpt_id, tool_use.source_range.start)
@@ -1979,7 +1994,7 @@ impl ContextEditor {
                             let confirm_command = Arc::new({
                                 let context_editor = context_editor.clone();
                                 let command = command.clone();
-                                move |cx: &mut WindowContext| {
+                                move |_window: &mut Window, cx: &mut AppContext| {
                                     context_editor
                                         .update(cx, |context_editor, cx| {
                                             context_editor.run_command(
@@ -2001,7 +2016,7 @@ impl ContextEditor {
                             let render_toggle = {
                                 let confirm_command = confirm_command.clone();
                                 let command = command.clone();
-                                move |row, _, _, _cx: &mut WindowContext| {
+                                move |row, _, _, _window: &mut Window, _cx: &mut AppContext| {
                                     render_pending_slash_command_gutter_decoration(
                                         row,
                                         &command.status,
@@ -2011,7 +2026,7 @@ impl ContextEditor {
                             };
                             let render_trailer = {
                                 let command = command.clone();
-                                move |row, _unfold, cx: &mut WindowContext| {
+                                move |row, _unfold, window: &mut Window, cx: &mut AppContext| {
                                     // TODO: In the future we should investigate how we can expose
                                     // this as a hook on the `SlashCommand` trait so that we don't
                                     // need to special-case it here.
@@ -2019,6 +2034,7 @@ impl ContextEditor {
                                         return render_docs_slash_command_trailer(
                                             row,
                                             command.clone(),
+                                            window,
                                             cx,
                                         );
                                     }
@@ -2090,7 +2106,9 @@ impl ContextEditor {
                         ..Default::default()
                     };
                     let render_trailer =
-                        move |_row, _unfold, _cx: &mut WindowContext| Empty.into_any();
+                        move |_row, _unfold, _window: &mut Window, _cx: &mut AppContext| {
+                            Empty.into_any()
+                        };
 
                     let start = buffer
                         .anchor_in_excerpt(excerpt_id, output_range.start)
@@ -2204,7 +2222,7 @@ impl ContextEditor {
                         crease_start..crease_end,
                         invoked_slash_command_fold_placeholder(command_id, context),
                         fold_toggle("invoked-slash-command"),
-                        |_row, _folded, _cx| Empty.into_any(),
+                        |_row, _folded, _window, _cx| Empty.into_any(),
                     );
                     let crease_ids = editor.insert_creases([crease.clone()], cx);
                     editor.fold_creases(vec![crease], false, cx);
@@ -2618,14 +2636,14 @@ impl ContextEditor {
         })
     }
 
-    fn esc_kbd(cx: &WindowContext) -> Div {
+    fn esc_kbd(window: &Window, cx: &AppContext) -> Div {
         let colors = cx.theme().colors().clone();
 
         h_flex()
             .items_center()
             .gap_1()
             .font(theme::ThemeSettings::get_global(cx).buffer_font.clone())
-            .text_size(TextSize::XSmall.rems(cx))
+            .text_size(TextSize::XSmall.rems(window, cx))
             .text_color(colors.text_muted)
             .child("Press")
             .child(
@@ -2727,17 +2745,18 @@ impl ContextEditor {
                                             .child(label)
                                             .children(spinner),
                                     )
-                                    .tooltip(|cx| {
+                                    .tooltip(|window, cx| {
                                         Tooltip::with_meta(
                                             "Toggle message role",
                                             None,
                                             "Available roles: You (User), Assistant, System",
+                                            window,
                                             cx,
                                         )
                                     })
                                     .on_click({
                                         let context = context.clone();
-                                        move |_, cx| {
+                                        move |_, _window, cx| {
                                             context.update(cx, |context, cx| {
                                                 context.cycle_message_roles(
                                                     HashSet::from_iter(Some(message_id)),
@@ -2767,11 +2786,12 @@ impl ContextEditor {
                                                     .size(IconSize::XSmall)
                                                     .color(Color::Hint),
                                             )
-                                            .tooltip(|cx| {
+                                            .tooltip(|window, cx| {
                                                 Tooltip::with_meta(
                                                     "Context Cached",
                                                     None,
                                                     "Large messages cached to optimize performance",
+                                                    window,
                                                     cx,
                                                 )
                                             })
@@ -2799,11 +2819,13 @@ impl ContextEditor {
                                         .icon_color(Color::Error)
                                         .icon_size(IconSize::XSmall)
                                         .icon_position(IconPosition::Start)
-                                        .tooltip(move |cx| Tooltip::text("View Details", cx))
+                                        .tooltip(move |window, cx| {
+                                            Tooltip::text("View Details", window, cx)
+                                        })
                                         .on_click({
                                             let context = context.clone();
                                             let error = error.clone();
-                                            move |_, cx| {
+                                            move |_, _window, cx| {
                                                 context.update(cx, |_, cx| {
                                                     cx.emit(ContextEvent::ShowAssistError(
                                                         error.clone(),
@@ -3633,8 +3655,8 @@ impl ContextEditor {
                             .style(ButtonStyle::Filled)
                             .on_click({
                                 let focus_handle = self.focus_handle(cx).clone();
-                                move |_event, cx| {
-                                    focus_handle.dispatch_action(&ShowConfiguration, cx);
+                                move |_event, window, cx| {
+                                    focus_handle.dispatch_action(&ShowConfiguration, window, cx);
                                 }
                             }),
                     )
@@ -3697,8 +3719,8 @@ impl ContextEditor {
                 KeyBinding::for_action_in(&Assist, &focus_handle, cx)
                     .map(|binding| binding.into_any_element()),
             )
-            .on_click(move |_event, cx| {
-                focus_handle.dispatch_action(&Assist, cx);
+            .on_click(move |_event, window, cx| {
+                focus_handle.dispatch_action(&Assist, window, cx);
             })
     }
 
@@ -3748,8 +3770,8 @@ impl ContextEditor {
                 KeyBinding::for_action_in(&Edit, &focus_handle, cx)
                     .map(|binding| binding.into_any_element()),
             )
-            .on_click(move |_event, cx| {
-                focus_handle.dispatch_action(&Edit, cx);
+            .on_click(move |_event, window, cx| {
+                focus_handle.dispatch_action(&Edit, window, cx);
             })
     }
 
@@ -3762,7 +3784,7 @@ impl ContextEditor {
                 .icon_size(IconSize::Small)
                 .icon_color(Color::Muted)
                 .icon_position(IconPosition::Start)
-                .tooltip(|cx| Tooltip::text("Type / to insert via keyboard", cx)),
+                .tooltip(|window, cx| Tooltip::text("Type / to insert via keyboard", window, cx)),
         )
     }
 
@@ -4088,15 +4110,15 @@ fn render_fold_icon_button(
     editor: WeakView<Editor>,
     icon: IconName,
     label: SharedString,
-) -> Arc<dyn Send + Sync + Fn(FoldId, Range<Anchor>, &mut WindowContext) -> AnyElement> {
-    Arc::new(move |fold_id, fold_range, _cx| {
+) -> Arc<dyn Send + Sync + Fn(FoldId, Range<Anchor>, &mut Window, &mut AppContext) -> AnyElement> {
+    Arc::new(move |fold_id, fold_range, _window, _cx| {
         let editor = editor.clone();
         ButtonLike::new(fold_id)
             .style(ButtonStyle::Filled)
             .layer(ElevationIndex::ElevatedSurface)
             .child(Icon::new(icon))
             .child(Label::new(label.clone()).single_line())
-            .on_click(move |_, cx| {
+            .on_click(move |_, _window, cx| {
                 editor
                     .update(cx, |editor, cx| {
                         let buffer_start = fold_range
@@ -4215,7 +4237,7 @@ impl FocusableView for ContextEditor {
 impl Item for ContextEditor {
     type Event = editor::EditorEvent;
 
-    fn tab_content_text(&self, cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, cx: &AppContext) -> Option<SharedString> {
         Some(util::truncate_and_trailoff(&self.title(cx), MAX_TAB_TITLE_LEN).into())
     }
 
@@ -4339,13 +4361,13 @@ impl FollowableItem for ContextEditor {
         self.remote_id
     }
 
-    fn to_state_proto(&self, cx: &WindowContext) -> Option<proto::view::Variant> {
+    fn to_state_proto(&self, window: &Window, cx: &AppContext) -> Option<proto::view::Variant> {
         let context = self.context.read(cx);
         Some(proto::view::Variant::ContextEditor(
             proto::view::ContextEditor {
                 context_id: context.id().to_proto(),
                 editor: if let Some(proto::view::Variant::Editor(proto)) =
-                    self.editor.read(cx).to_state_proto(cx)
+                    self.editor.read(cx).to_state_proto(window, cx)
                 {
                     Some(proto)
                 } else {
@@ -4359,7 +4381,8 @@ impl FollowableItem for ContextEditor {
         workspace: View<Workspace>,
         id: workspace::ViewId,
         state: &mut Option<proto::view::Variant>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Option<Task<Result<View<Self>>>> {
         let proto::view::Variant::ContextEditor(_) = state.as_ref()? else {
             return None;
@@ -4381,7 +4404,7 @@ impl FollowableItem for ContextEditor {
         let context_editor =
             panel.update(cx, |panel, cx| panel.open_remote_context(context_id, cx));
 
-        Some(cx.spawn(|mut cx| async move {
+        Some(window.spawn(cx, |mut cx| async move {
             let context_editor = context_editor.await?;
             context_editor
                 .update(&mut cx, |context_editor, cx| {
@@ -4414,11 +4437,12 @@ impl FollowableItem for ContextEditor {
         &self,
         event: &Self::Event,
         update: &mut Option<proto::update_view::Variant>,
-        cx: &WindowContext,
+        window: &Window,
+        cx: &AppContext,
     ) -> bool {
         self.editor
             .read(cx)
-            .add_event_to_update_proto(event, update, cx)
+            .add_event_to_update_proto(event, update, window, cx)
     }
 
     fn apply_update_proto(
@@ -4432,7 +4456,7 @@ impl FollowableItem for ContextEditor {
         })
     }
 
-    fn is_project_item(&self, _cx: &WindowContext) -> bool {
+    fn is_project_item(&self, _window: &Window, _cx: &AppContext) -> bool {
         true
     }
 
@@ -4446,7 +4470,7 @@ impl FollowableItem for ContextEditor {
         })
     }
 
-    fn dedup(&self, existing: &Self, cx: &WindowContext) -> Option<item::Dedup> {
+    fn dedup(&self, existing: &Self, _window: &Window, cx: &AppContext) -> Option<item::Dedup> {
         if existing.context.read(cx).id() == self.context.read(cx).id() {
             Some(item::Dedup::KeepExisting)
         } else {
@@ -4550,7 +4574,7 @@ impl Render for ContextEditorToolbarItem {
                 div().visible_on_hover("chat-title-group").child(
                     IconButton::new("regenerate-context", IconName::RefreshTitle)
                         .shape(ui::IconButtonShape::Square)
-                        .tooltip(|cx| Tooltip::text("Regenerate Title", cx))
+                        .tooltip(|window, cx| Tooltip::text("Regenerate Title", window, cx))
                         .on_click(cx.listener(move |_, _, cx| {
                             cx.emit(ContextEditorToolbarItemEvent::RegenerateSummary)
                         })),
@@ -4617,8 +4641,8 @@ impl Render for ContextEditorToolbarItem {
                                         .size(IconSize::XSmall),
                                 ),
                         )
-                        .tooltip(move |cx| {
-                            Tooltip::for_action("Change Model", &ToggleModelSelector, cx)
+                        .tooltip(move |window, cx| {
+                            Tooltip::for_action("Change Model", &ToggleModelSelector, window, cx)
                         }),
                 )
                 .with_handle(self.language_model_selector_menu_handle.clone()),
@@ -4749,7 +4773,7 @@ impl EventEmitter<()> for ContextHistory {}
 impl Item for ContextHistory {
     type Event = ();
 
-    fn tab_content_text(&self, _cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, _cx: &AppContext) -> Option<SharedString> {
         Some("History".into())
     }
 }
@@ -4911,12 +4935,12 @@ impl Render for ConfigurationView {
         // We use a canvas here to get scrolling to work in the ConfigurationView. It's a workaround
         // because we couldn't the element to take up the size of the parent.
         canvas(
-            move |bounds, cx| {
-                element.prepaint_as_root(bounds.origin, bounds.size.into(), cx);
+            move |bounds, window, cx| {
+                element.prepaint_as_root(bounds.origin, bounds.size.into(), window, cx);
                 element
             },
-            |_, mut element, cx| {
-                element.paint(cx);
+            |_, mut element, window, cx| {
+                element.paint(window, cx);
             },
         )
         .flex_1()
@@ -4939,25 +4963,26 @@ impl FocusableView for ConfigurationView {
 impl Item for ConfigurationView {
     type Event = ConfigurationViewEvent;
 
-    fn tab_content_text(&self, _cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, _cx: &AppContext) -> Option<SharedString> {
         Some("Configuration".into())
     }
 }
 
-type ToggleFold = Arc<dyn Fn(bool, &mut WindowContext) + Send + Sync>;
+type ToggleFold = Arc<dyn Fn(bool, &mut Window, &mut AppContext) + Send + Sync>;
 
 fn render_slash_command_output_toggle(
     row: MultiBufferRow,
     is_folded: bool,
     fold: ToggleFold,
-    _cx: &mut WindowContext,
+    _window: &mut Window,
+    _cx: &mut AppContext,
 ) -> AnyElement {
     Disclosure::new(
         ("slash-command-output-fold-indicator", row.0 as u64),
         !is_folded,
     )
     .toggle_state(is_folded)
-    .on_click(move |_e, cx| fold(!is_folded, cx))
+    .on_click(move |_e, window, cx| fold(!is_folded, window, cx))
     .into_any_element()
 }
 
@@ -4966,13 +4991,14 @@ fn fold_toggle(
 ) -> impl Fn(
     MultiBufferRow,
     bool,
-    Arc<dyn Fn(bool, &mut WindowContext) + Send + Sync>,
-    &mut WindowContext,
+    Arc<dyn Fn(bool, &mut Window, &mut AppContext) + Send + Sync>,
+    &mut Window,
+    &mut AppContext,
 ) -> AnyElement {
-    move |row, is_folded, fold, _cx| {
+    move |row, is_folded, fold, _window, _cx| {
         Disclosure::new((name, row.0 as u64), !is_folded)
             .toggle_state(is_folded)
-            .on_click(move |_e, cx| fold(!is_folded, cx))
+            .on_click(move |_e, window, cx| fold(!is_folded, window, cx))
             .into_any_element()
     }
 }
@@ -4980,14 +5006,14 @@ fn fold_toggle(
 fn quote_selection_fold_placeholder(title: String, editor: WeakView<Editor>) -> FoldPlaceholder {
     FoldPlaceholder {
         render: Arc::new({
-            move |fold_id, fold_range, _cx| {
+            move |fold_id, fold_range, _window, _cx| {
                 let editor = editor.clone();
                 ButtonLike::new(fold_id)
                     .style(ButtonStyle::Filled)
                     .layer(ElevationIndex::ElevatedSurface)
                     .child(Icon::new(IconName::TextSnippet))
                     .child(Label::new(title.clone()).single_line())
-                    .on_click(move |_, cx| {
+                    .on_click(move |_, _window, cx| {
                         editor
                             .update(cx, |editor, cx| {
                                 let buffer_start = fold_range
@@ -5010,24 +5036,25 @@ fn render_quote_selection_output_toggle(
     row: MultiBufferRow,
     is_folded: bool,
     fold: ToggleFold,
-    _cx: &mut WindowContext,
+    _window: &mut Window,
+    _cx: &mut AppContext,
 ) -> AnyElement {
     Disclosure::new(("quote-selection-indicator", row.0 as u64), !is_folded)
         .toggle_state(is_folded)
-        .on_click(move |_e, cx| fold(!is_folded, cx))
+        .on_click(move |_e, window, cx| fold(!is_folded, window, cx))
         .into_any_element()
 }
 
 fn render_pending_slash_command_gutter_decoration(
     row: MultiBufferRow,
     status: &PendingSlashCommandStatus,
-    confirm_command: Arc<dyn Fn(&mut WindowContext)>,
+    confirm_command: Arc<dyn Fn(&mut Window, &mut AppContext)>,
 ) -> AnyElement {
     let mut icon = IconButton::new(
         ("slash-command-gutter-decoration", row.0),
         ui::IconName::TriangleRight,
     )
-    .on_click(move |_e, cx| confirm_command(cx))
+    .on_click(move |_e, window, cx| confirm_command(window, cx))
     .icon_size(ui::IconSize::Small)
     .size(ui::ButtonSize::None);
 
@@ -5047,7 +5074,8 @@ fn render_pending_slash_command_gutter_decoration(
 fn render_docs_slash_command_trailer(
     row: MultiBufferRow,
     command: ParsedSlashCommand,
-    cx: &mut WindowContext,
+    _window: &mut Window,
+    cx: &mut AppContext,
 ) -> AnyElement {
     if command.arguments.is_empty() {
         return Empty.into_any();
@@ -5078,7 +5106,7 @@ fn render_docs_slash_command_trailer(
                 ))
                 .tooltip({
                     let package = package.clone();
-                    move |cx| Tooltip::text(format!("Indexing {package}…"), cx)
+                    move |window, cx| Tooltip::text(format!("Indexing {package}…"), window, cx)
                 })
                 .into_any_element(),
         );
@@ -5093,7 +5121,9 @@ fn render_docs_slash_command_trailer(
                         .size(IconSize::Small)
                         .color(Color::Warning),
                 )
-                .tooltip(move |cx| Tooltip::text(format!("Failed to index: {latest_error}"), cx))
+                .tooltip(move |window, cx| {
+                    Tooltip::text(format!("Failed to index: {latest_error}"), window, cx)
+                })
                 .into_any_element(),
         )
     }
@@ -5141,7 +5171,7 @@ fn invoked_slash_command_fold_placeholder(
     FoldPlaceholder {
         constrain_width: false,
         merge_adjacent: false,
-        render: Arc::new(move |fold_id, _, cx| {
+        render: Arc::new(move |fold_id, _, _window, cx| {
             let Some(context) = context.upgrade() else {
                 return Empty.into_any();
             };

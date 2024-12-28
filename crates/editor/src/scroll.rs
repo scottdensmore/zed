@@ -12,9 +12,7 @@ use crate::{
 };
 pub use autoscroll::{Autoscroll, AutoscrollStrategy};
 use core::fmt::Debug;
-use gpui::{
-    point, px, Along, AppContext, Axis, Entity, Global, Pixels, Task, ViewContext, WindowContext,
-};
+use gpui::{point, px, Along, AppContext, Axis, Entity, Global, Pixels, Task, ViewContext, Window};
 use language::{Bias, Point};
 pub use scroll_amount::ScrollAmount;
 use settings::Settings;
@@ -188,7 +186,7 @@ pub struct ScrollManager {
 }
 
 impl ScrollManager {
-    pub fn new(cx: &mut WindowContext) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut AppContext) -> Self {
         ScrollManager {
             vertical_scroll_margin: EditorSettings::get_global(cx).vertical_scroll_margin,
             anchor: ScrollAnchor::new(),

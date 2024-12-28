@@ -28,21 +28,21 @@ pub use proto::PanelId;
 
 pub trait Panel: FocusableView + EventEmitter<PanelEvent> {
     fn persistent_name() -> &'static str;
-    fn position(&self, cx: &WindowContext) -> DockPosition;
+    fn position(&self, _window: &Window, cx: &AppContext) -> DockPosition;
     fn position_is_valid(&self, position: DockPosition) -> bool;
     fn set_position(&mut self, position: DockPosition, cx: &mut ViewContext<Self>);
-    fn size(&self, cx: &WindowContext) -> Pixels;
+    fn size(&self, _window: &Window, cx: &AppContext) -> Pixels;
     fn set_size(&mut self, size: Option<Pixels>, cx: &mut ViewContext<Self>);
-    fn icon(&self, cx: &WindowContext) -> Option<ui::IconName>;
-    fn icon_tooltip(&self, cx: &WindowContext) -> Option<&'static str>;
+    fn icon(&self, _window: &Window, cx: &AppContext) -> Option<ui::IconName>;
+    fn icon_tooltip(&self, _window: &Window, cx: &AppContext) -> Option<&'static str>;
     fn toggle_action(&self) -> Box<dyn Action>;
-    fn icon_label(&self, _: &WindowContext) -> Option<String> {
+    fn icon_label(&self, _: &Window, _: &AppContext) -> Option<String> {
         None
     }
-    fn is_zoomed(&self, _cx: &WindowContext) -> bool {
+    fn is_zoomed(&self, _window: &Window, _cx: &AppContext) -> bool {
         false
     }
-    fn starts_open(&self, _cx: &WindowContext) -> bool {
+    fn starts_open(&self, _window: &Window, _cx: &AppContext) -> bool {
         false
     }
     fn set_zoomed(&mut self, _zoomed: bool, _cx: &mut ViewContext<Self>) {}
@@ -58,20 +58,20 @@ pub trait Panel: FocusableView + EventEmitter<PanelEvent> {
 pub trait PanelHandle: Send + Sync {
     fn panel_id(&self) -> EntityId;
     fn persistent_name(&self) -> &'static str;
-    fn position(&self, cx: &WindowContext) -> DockPosition;
-    fn position_is_valid(&self, position: DockPosition, cx: &WindowContext) -> bool;
-    fn set_position(&self, position: DockPosition, cx: &mut WindowContext);
-    fn is_zoomed(&self, cx: &WindowContext) -> bool;
-    fn set_zoomed(&self, zoomed: bool, cx: &mut WindowContext);
-    fn set_active(&self, active: bool, cx: &mut WindowContext);
+    fn position(&self, _window: &Window, cx: &AppContext) -> DockPosition;
+    fn position_is_valid(&self, position: DockPosition, _window: &Window, cx: &AppContext) -> bool;
+    fn set_position(&self, position: DockPosition, _window: &mut Window, cx: &mut AppContext);
+    fn is_zoomed(&self, _window: &Window, cx: &AppContext) -> bool;
+    fn set_zoomed(&self, zoomed: bool, _window: &mut Window, cx: &mut AppContext);
+    fn set_active(&self, active: bool, _window: &mut Window, cx: &mut AppContext);
     fn remote_id(&self) -> Option<proto::PanelId>;
-    fn pane(&self, cx: &WindowContext) -> Option<View<Pane>>;
-    fn size(&self, cx: &WindowContext) -> Pixels;
-    fn set_size(&self, size: Option<Pixels>, cx: &mut WindowContext);
-    fn icon(&self, cx: &WindowContext) -> Option<ui::IconName>;
-    fn icon_tooltip(&self, cx: &WindowContext) -> Option<&'static str>;
-    fn toggle_action(&self, cx: &WindowContext) -> Box<dyn Action>;
-    fn icon_label(&self, cx: &WindowContext) -> Option<String>;
+    fn pane(&self, _window: &Window, cx: &AppContext) -> Option<View<Pane>>;
+    fn size(&self, _window: &Window, cx: &AppContext) -> Pixels;
+    fn set_size(&self, size: Option<Pixels>, _window: &mut Window, cx: &mut AppContext);
+    fn icon(&self, _window: &Window, cx: &AppContext) -> Option<ui::IconName>;
+    fn icon_tooltip(&self, _window: &Window, cx: &AppContext) -> Option<&'static str>;
+    fn toggle_action(&self, _window: &Window, cx: &AppContext) -> Box<dyn Action>;
+    fn icon_label(&self, _window: &Window, cx: &AppContext) -> Option<String>;
     fn focus_handle(&self, cx: &AppContext) -> FocusHandle;
     fn to_any(&self) -> AnyView;
 }
@@ -88,31 +88,31 @@ where
         T::persistent_name()
     }
 
-    fn position(&self, cx: &WindowContext) -> DockPosition {
-        self.read(cx).position(cx)
+    fn position(&self, window: &Window, cx: &AppContext) -> DockPosition {
+        self.read(cx).position(window, cx)
     }
 
-    fn position_is_valid(&self, position: DockPosition, cx: &WindowContext) -> bool {
+    fn position_is_valid(&self, position: DockPosition, _window: &Window, cx: &AppContext) -> bool {
         self.read(cx).position_is_valid(position)
     }
 
-    fn set_position(&self, position: DockPosition, cx: &mut WindowContext) {
+    fn set_position(&self, position: DockPosition, _window: &mut Window, cx: &mut AppContext) {
         self.update(cx, |this, cx| this.set_position(position, cx))
     }
 
-    fn is_zoomed(&self, cx: &WindowContext) -> bool {
-        self.read(cx).is_zoomed(cx)
+    fn is_zoomed(&self, window: &Window, cx: &AppContext) -> bool {
+        self.read(cx).is_zoomed(window, cx)
     }
 
-    fn set_zoomed(&self, zoomed: bool, cx: &mut WindowContext) {
+    fn set_zoomed(&self, zoomed: bool, _window: &mut Window, cx: &mut AppContext) {
         self.update(cx, |this, cx| this.set_zoomed(zoomed, cx))
     }
 
-    fn set_active(&self, active: bool, cx: &mut WindowContext) {
+    fn set_active(&self, active: bool, _window: &mut Window, cx: &mut AppContext) {
         self.update(cx, |this, cx| this.set_active(active, cx))
     }
 
-    fn pane(&self, cx: &WindowContext) -> Option<View<Pane>> {
+    fn pane(&self, _window: &Window, cx: &AppContext) -> Option<View<Pane>> {
         self.read(cx).pane()
     }
 
@@ -120,28 +120,28 @@ where
         T::remote_id()
     }
 
-    fn size(&self, cx: &WindowContext) -> Pixels {
-        self.read(cx).size(cx)
+    fn size(&self, window: &Window, cx: &AppContext) -> Pixels {
+        self.read(cx).size(window, cx)
     }
 
-    fn set_size(&self, size: Option<Pixels>, cx: &mut WindowContext) {
+    fn set_size(&self, size: Option<Pixels>, _window: &mut Window, cx: &mut AppContext) {
         self.update(cx, |this, cx| this.set_size(size, cx))
     }
 
-    fn icon(&self, cx: &WindowContext) -> Option<ui::IconName> {
-        self.read(cx).icon(cx)
+    fn icon(&self, window: &Window, cx: &AppContext) -> Option<ui::IconName> {
+        self.read(cx).icon(window, cx)
     }
 
-    fn icon_tooltip(&self, cx: &WindowContext) -> Option<&'static str> {
-        self.read(cx).icon_tooltip(cx)
+    fn icon_tooltip(&self, window: &Window, cx: &AppContext) -> Option<&'static str> {
+        self.read(cx).icon_tooltip(window, cx)
     }
 
-    fn toggle_action(&self, cx: &WindowContext) -> Box<dyn Action> {
+    fn toggle_action(&self, _window: &Window, cx: &AppContext) -> Box<dyn Action> {
         self.read(cx).toggle_action()
     }
 
-    fn icon_label(&self, cx: &WindowContext) -> Option<String> {
-        self.read(cx).icon_label(cx)
+    fn icon_label(&self, window: &Window, cx: &AppContext) -> Option<String> {
+        self.read(cx).icon_label(window, cx)
     }
 
     fn to_any(&self) -> AnyView {
@@ -545,27 +545,32 @@ impl Dock {
         }
     }
 
-    pub fn zoomed_panel(&self, cx: &WindowContext) -> Option<Arc<dyn PanelHandle>> {
+    pub fn zoomed_panel(&self, window: &Window, cx: &AppContext) -> Option<Arc<dyn PanelHandle>> {
         let entry = self.visible_entry()?;
-        if entry.panel.is_zoomed(cx) {
+        if entry.panel.is_zoomed(window, cx) {
             Some(entry.panel.clone())
         } else {
             None
         }
     }
 
-    pub fn panel_size(&self, panel: &dyn PanelHandle, cx: &WindowContext) -> Option<Pixels> {
+    pub fn panel_size(
+        &self,
+        panel: &dyn PanelHandle,
+        window: &Window,
+        cx: &AppContext,
+    ) -> Option<Pixels> {
         self.panel_entries
             .iter()
             .find(|entry| entry.panel.panel_id() == panel.panel_id())
-            .map(|entry| entry.panel.size(cx))
+            .map(|entry| entry.panel.size(window, cx))
     }
 
-    pub fn active_panel_size(&self, cx: &WindowContext) -> Option<Pixels> {
+    pub fn active_panel_size(&self, window: &Window, cx: &AppContext) -> Option<Pixels> {
         if self.is_open {
             self.panel_entries
                 .get(self.active_panel_index)
-                .map(|entry| entry.panel.size(cx))
+                .map(|entry| entry.panel.size(window, cx))
         } else {
             None
         }
@@ -595,11 +600,11 @@ impl Dock {
         dispatch_context
     }
 
-    pub fn clamp_panel_size(&mut self, max_size: Pixels, cx: &mut WindowContext) {
+    pub fn clamp_panel_size(&mut self, max_size: Pixels, window: &mut Window, cx: &mut AppContext) {
         let max_size = px((max_size.0 - RESIZE_HANDLE_SIZE.0).abs());
         for panel in self.panel_entries.iter().map(|entry| &entry.panel) {
-            if panel.size(cx) > max_size {
-                panel.set_size(Some(max_size.max(RESIZE_HANDLE_SIZE)), cx);
+            if panel.size(window, cx) > max_size {
+                panel.set_size(Some(max_size.max(RESIZE_HANDLE_SIZE)), window, cx);
             }
         }
     }
@@ -615,9 +620,9 @@ impl Render for Dock {
             let create_resize_handle = || {
                 let handle = div()
                     .id("resize-handle")
-                    .on_drag(DraggedDock(position), |dock, _, cx| {
+                    .on_drag(DraggedDock(position), |dock, _, window, cx| {
                         cx.stop_propagation();
-                        cx.new_view(|_| dock.clone())
+                        window.new_view(cx, |_| dock.clone())
                     })
                     .on_mouse_down(
                         MouseButton::Left,
@@ -749,14 +754,14 @@ impl Render for PanelButtons {
 
                 Some(
                     right_click_menu(name)
-                        .menu(move |cx| {
+                        .menu(move |window, cx| {
                             const POSITIONS: [DockPosition; 3] = [
                                 DockPosition::Left,
                                 DockPosition::Right,
                                 DockPosition::Bottom,
                             ];
 
-                            ContextMenu::build(cx, |mut menu, cx| {
+                            ContextMenu::build(window, cx, |mut menu, cx| {
                                 for position in POSITIONS {
                                     if position != dock_position
                                         && panel.position_is_valid(position, cx)
@@ -765,8 +770,8 @@ impl Render for PanelButtons {
                                         menu = menu.entry(
                                             format!("Dock {}", position.label()),
                                             None,
-                                            move |cx| {
-                                                panel.set_position(position, cx);
+                                            move |window, cx| {
+                                                panel.set_position(position, window, cx);
                                             },
                                         )
                                     }
@@ -782,10 +787,12 @@ impl Render for PanelButtons {
                                 .toggle_state(is_active_button)
                                 .on_click({
                                     let action = action.boxed_clone();
-                                    move |_, cx| cx.dispatch_action(action.boxed_clone())
+                                    move |_, window, cx| {
+                                        window.dispatch_action(action.boxed_clone(), cx)
+                                    }
                                 })
-                                .tooltip(move |cx| {
-                                    Tooltip::for_action(tooltip.clone(), &*action, cx)
+                                .tooltip(move |window, cx| {
+                                    Tooltip::for_action(tooltip.clone(), &*action, window, cx)
                                 }),
                         ),
                 )
@@ -808,7 +815,7 @@ impl StatusItemView for PanelButtons {
 #[cfg(any(test, feature = "test-support"))]
 pub mod test {
     use super::*;
-    use gpui::{actions, div, ViewContext, WindowContext};
+    use gpui::{actions, div, ViewContext, Window};
 
     pub struct TestPanel {
         pub position: DockPosition,
@@ -822,7 +829,7 @@ pub mod test {
     impl EventEmitter<PanelEvent> for TestPanel {}
 
     impl TestPanel {
-        pub fn new(position: DockPosition, cx: &mut WindowContext) -> Self {
+        pub fn new(position: DockPosition, _window: &mut Window, cx: &mut AppContext) -> Self {
             Self {
                 position,
                 zoomed: false,
@@ -857,7 +864,7 @@ pub mod test {
             cx.update_global::<SettingsStore, _>(|_, _| {});
         }
 
-        fn size(&self, _: &WindowContext) -> Pixels {
+        fn size(&self, _: &Window, _: &AppContext) -> Pixels {
             self.size
         }
 
@@ -865,11 +872,11 @@ pub mod test {
             self.size = size.unwrap_or(px(300.));
         }
 
-        fn icon(&self, _: &WindowContext) -> Option<ui::IconName> {
+        fn icon(&self, _: &Window, _: &AppContext) -> Option<ui::IconName> {
             None
         }
 
-        fn icon_tooltip(&self, _cx: &WindowContext) -> Option<&'static str> {
+        fn icon_tooltip(&self, _window: &Window, _cx: &AppContext) -> Option<&'static str> {
             None
         }
 
@@ -877,7 +884,7 @@ pub mod test {
             ToggleTestPanel.boxed_clone()
         }
 
-        fn is_zoomed(&self, _: &WindowContext) -> bool {
+        fn is_zoomed(&self, _: &Window, _: &AppContext) -> bool {
             self.zoomed
         }
 

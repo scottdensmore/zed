@@ -91,21 +91,21 @@ impl ParentElement for TabBar {
 }
 
 impl RenderOnce for TabBar {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut AppContext) -> impl IntoElement {
         div()
             .id(self.id)
             .group("tab_bar")
             .flex()
             .flex_none()
             .w_full()
-            .h(Tab::container_height(cx))
+            .h(Tab::container_height(window, cx))
             .bg(cx.theme().colors().tab_bar_background)
             .when(!self.start_children.is_empty(), |this| {
                 this.child(
                     h_flex()
                         .flex_none()
-                        .gap(DynamicSpacing::Base04.rems(cx))
-                        .px(DynamicSpacing::Base06.rems(cx))
+                        .gap(DynamicSpacing::Base04.rems(window, cx))
+                        .px(DynamicSpacing::Base06.rems(window, cx))
                         .border_b_1()
                         .border_r_1()
                         .border_color(cx.theme().colors().border)
@@ -142,8 +142,8 @@ impl RenderOnce for TabBar {
                 this.child(
                     h_flex()
                         .flex_none()
-                        .gap(DynamicSpacing::Base04.rems(cx))
-                        .px(DynamicSpacing::Base06.rems(cx))
+                        .gap(DynamicSpacing::Base04.rems(window, cx))
+                        .px(DynamicSpacing::Base06.rems(window, cx))
                         .border_b_1()
                         .border_l_1()
                         .border_color(cx.theme().colors().border)

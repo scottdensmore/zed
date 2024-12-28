@@ -1002,7 +1002,12 @@ impl Item for TerminalView {
         Some(self.terminal().read(cx).title(false).into())
     }
 
-    fn tab_content(&self, params: TabContentParams, cx: &WindowContext) -> AnyElement {
+    fn tab_content(
+        &self,
+        params: TabContentParams,
+        _window: &Window,
+        cx: &AppContext,
+    ) -> AnyElement {
         let terminal = self.terminal().read(cx);
         let title = terminal.title(true);
         let rerun_button = |task_id: task::TaskId| {
@@ -1011,14 +1016,17 @@ impl Item for TerminalView {
                 .size(ButtonSize::Compact)
                 .icon_color(Color::Default)
                 .shape(ui::IconButtonShape::Square)
-                .tooltip(|cx| Tooltip::text("Rerun task", cx))
-                .on_click(move |_, cx| {
-                    cx.dispatch_action(Box::new(zed_actions::Rerun {
-                        task_id: Some(task_id.0.clone()),
-                        allow_concurrent_runs: Some(true),
-                        use_new_terminal: Some(false),
-                        reevaluate_context: false,
-                    }));
+                .tooltip(|window, cx| Tooltip::text("Rerun task", window, cx))
+                .on_click(move |_, window, cx| {
+                    window.dispatch_action(
+                        Box::new(zed_actions::Rerun {
+                            task_id: Some(task_id.0.clone()),
+                            allow_concurrent_runs: Some(true),
+                            use_new_terminal: Some(false),
+                            reevaluate_context: false,
+                        }),
+                        cx,
+                    );
                 })
         };
 
@@ -1170,9 +1178,12 @@ impl SerializableItem for TerminalView {
     fn cleanup(
         workspace_id: WorkspaceId,
         alive_items: Vec<workspace::ItemId>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<gpui::Result<()>> {
-        cx.spawn(|_| TERMINAL_DB.delete_unloaded_items(workspace_id, alive_items))
+        window.spawn(cx, |_| {
+            TERMINAL_DB.delete_unloaded_items(workspace_id, alive_items)
+        })
     }
 
     fn serialize(
@@ -1207,12 +1218,13 @@ impl SerializableItem for TerminalView {
         workspace: WeakView<Workspace>,
         workspace_id: workspace::WorkspaceId,
         item_id: workspace::ItemId,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<anyhow::Result<View<Self>>> {
-        let window = cx.window_handle();
-        cx.spawn(|mut cx| async move {
+        let window = window.window_handle(cx);
+        window.spawn(cx, |mut cx| async move {
             let cwd = cx
-                .update(|cx| {
+                .update(|_window, cx| {
                     let from_db = TERMINAL_DB
                         .get_working_directory(item_id, workspace_id)
                         .log_err()
@@ -1236,8 +1248,8 @@ impl SerializableItem for TerminalView {
                     project.create_terminal(TerminalKind::Shell(cwd), window, cx)
                 })?
                 .await?;
-            cx.update(|cx| {
-                cx.new_view(|cx| {
+            cx.update(|window, cx| {
+                window.new_view(cx, |cx| {
                     TerminalView::new(
                         terminal,
                         workspace,

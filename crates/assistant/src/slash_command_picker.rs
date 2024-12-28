@@ -27,8 +27,8 @@ enum SlashCommandEntry {
     Info(SlashCommandInfo),
     Advert {
         name: SharedString,
-        renderer: fn(&mut WindowContext) -> AnyElement,
-        on_confirm: fn(&mut WindowContext),
+        renderer: fn(&mut Window, &mut AppContext) -> AnyElement,
+        on_confirm: fn(&mut Window, &mut AppContext),
     },
 }
 
@@ -78,7 +78,7 @@ impl PickerDelegate for SlashCommandDelegate {
         cx.notify();
     }
 
-    fn placeholder_text(&self, _cx: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, _window: &mut Window, _cx: &mut AppContext) -> Arc<str> {
         "Select a command...".into()
     }
 
@@ -179,7 +179,11 @@ impl PickerDelegate for SlashCommandDelegate {
                     .toggle_state(selected)
                     .tooltip({
                         let description = info.description.clone();
-                        move |cx| cx.new_view(|_| Tooltip::new(description.clone())).into()
+                        move |window, cx| {
+                            window
+                                .new_view(cx, |_| Tooltip::new(description.clone()))
+                                .into()
+                        }
                     })
                     .child(
                         v_flex()
@@ -236,7 +240,7 @@ impl PickerDelegate for SlashCommandDelegate {
 }
 
 impl<T: PopoverTrigger> RenderOnce for SlashCommandSelector<T> {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut AppContext) -> impl IntoElement {
         let all_models = self
             .working_set
             .featured_command_names(cx)
@@ -259,13 +263,13 @@ impl<T: PopoverTrigger> RenderOnce for SlashCommandSelector<T> {
             })
             .chain([SlashCommandEntry::Advert {
                 name: "create-your-command".into(),
-                renderer: |cx| {
+                renderer: |window, cx| {
                     v_flex()
                         .w_full()
                         .child(
                             h_flex()
                                 .w_full()
-                                .font_buffer(cx)
+                                .font_buffer(window, cx)
                                 .items_center()
                                 .justify_between()
                                 .child(
@@ -274,7 +278,7 @@ impl<T: PopoverTrigger> RenderOnce for SlashCommandSelector<T> {
                                         .gap_1p5()
                                         .child(Icon::new(IconName::Plus).size(IconSize::XSmall))
                                         .child(
-                                            div().font_buffer(cx).child(
+                                            div().font_buffer(window, cx).child(
                                                 Label::new("create-your-command")
                                                     .size(LabelSize::Small),
                                             ),
@@ -293,7 +297,9 @@ impl<T: PopoverTrigger> RenderOnce for SlashCommandSelector<T> {
                         )
                         .into_any_element()
                 },
-                on_confirm: |cx| cx.open_url("https://zed.dev/docs/extensions/slash-commands"),
+                on_confirm: |_window, cx| {
+                    cx.open_url("https://zed.dev/docs/extensions/slash-commands")
+                },
             }])
             .collect::<Vec<_>>();
 
@@ -304,7 +310,7 @@ impl<T: PopoverTrigger> RenderOnce for SlashCommandSelector<T> {
             selected_index: 0,
         };
 
-        let picker_view = cx.new_view(|cx| {
+        let picker_view = window.new_view(cx, |cx| {
             let picker = Picker::uniform_list(delegate, cx).max_height(Some(rems(20.).into()));
             picker
         });
@@ -314,7 +320,7 @@ impl<T: PopoverTrigger> RenderOnce for SlashCommandSelector<T> {
             .update(cx, |this, _| this.slash_menu_handle.clone())
             .ok();
         PopoverMenu::new("model-switcher")
-            .menu(move |_cx| Some(picker_view.clone()))
+            .menu(move |_window, _cx| Some(picker_view.clone()))
             .trigger(self.trigger)
             .attach(gpui::Corner::TopLeft)
             .anchor(gpui::Corner::BottomLeft)

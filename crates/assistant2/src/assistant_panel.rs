@@ -7,7 +7,7 @@ use fs::Fs;
 use gpui::{
     prelude::*, px, svg, Action, AnyElement, AppContext, AsyncWindowContext, EventEmitter,
     FocusHandle, FocusableView, FontWeight, Model, Pixels, Task, View, ViewContext, WeakView,
-    WindowContext,
+    Window,
 };
 use language::LanguageRegistry;
 use settings::Settings;
@@ -228,7 +228,7 @@ impl Panel for AssistantPanel {
         "AssistantPanel2"
     }
 
-    fn position(&self, _cx: &WindowContext) -> DockPosition {
+    fn position(&self, _window: &Window, _cx: &AppContext) -> DockPosition {
         DockPosition::Right
     }
 
@@ -251,9 +251,9 @@ impl Panel for AssistantPanel {
         );
     }
 
-    fn size(&self, cx: &WindowContext) -> Pixels {
+    fn size(&self, window: &Window, cx: &AppContext) -> Pixels {
         let settings = AssistantSettings::get_global(cx);
-        match self.position(cx) {
+        match self.position(window, cx) {
             DockPosition::Left | DockPosition::Right => {
                 self.width.unwrap_or(settings.default_width)
             }
@@ -275,11 +275,11 @@ impl Panel for AssistantPanel {
         Some(proto::PanelId::AssistantPanel)
     }
 
-    fn icon(&self, _cx: &WindowContext) -> Option<IconName> {
+    fn icon(&self, _window: &Window, _cx: &AppContext) -> Option<IconName> {
         Some(IconName::ZedAssistant2)
     }
 
-    fn icon_tooltip(&self, _cx: &WindowContext) -> Option<&'static str> {
+    fn icon_tooltip(&self, _window: &Window, _cx: &AppContext) -> Option<&'static str> {
         Some("Assistant Panel")
     }
 
@@ -315,17 +315,18 @@ impl AssistantPanel {
                             .style(ButtonStyle::Subtle)
                             .tooltip({
                                 let focus_handle = focus_handle.clone();
-                                move |cx| {
+                                move |window, cx| {
                                     Tooltip::for_action_in(
                                         "New Thread",
                                         &NewThread,
                                         &focus_handle,
+                                        window,
                                         cx,
                                     )
                                 }
                             })
-                            .on_click(move |_event, cx| {
-                                cx.dispatch_action(NewThread.boxed_clone());
+                            .on_click(move |_event, window, cx| {
+                                window.dispatch_action(NewThread.boxed_clone(), cx);
                             }),
                     )
                     .child(
@@ -334,25 +335,28 @@ impl AssistantPanel {
                             .style(ButtonStyle::Subtle)
                             .tooltip({
                                 let focus_handle = focus_handle.clone();
-                                move |cx| {
+                                move |window, cx| {
                                     Tooltip::for_action_in(
                                         "Open History",
                                         &OpenHistory,
                                         &focus_handle,
+                                        window,
                                         cx,
                                     )
                                 }
                             })
-                            .on_click(move |_event, cx| {
-                                cx.dispatch_action(OpenHistory.boxed_clone());
+                            .on_click(move |_event, window, cx| {
+                                window.dispatch_action(OpenHistory.boxed_clone(), cx);
                             }),
                     )
                     .child(
                         IconButton::new("configure-assistant", IconName::Settings)
                             .icon_size(IconSize::Small)
                             .style(ButtonStyle::Subtle)
-                            .tooltip(move |cx| Tooltip::text("Configure Assistant", cx))
-                            .on_click(move |_event, _cx| {
+                            .tooltip(move |window, cx| {
+                                Tooltip::text("Configure Assistant", window, cx)
+                            })
+                            .on_click(move |_event, _window, _cx| {
                                 println!("Configure Assistant");
                             }),
                     ),
@@ -411,8 +415,8 @@ impl AssistantPanel {
                                     &self.focus_handle(cx),
                                     cx,
                                 ))
-                                .on_click(move |_event, cx| {
-                                    cx.dispatch_action(OpenHistory.boxed_clone());
+                                .on_click(move |_event, window, cx| {
+                                    window.dispatch_action(OpenHistory.boxed_clone(), cx);
                                 }),
                         ),
                     )

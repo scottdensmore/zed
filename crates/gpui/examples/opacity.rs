@@ -54,7 +54,7 @@ impl HelloWorld {
             loop {
                 Timer::after(Duration::from_secs_f32(0.05)).await;
                 let mut stop = false;
-                let _ = cx.update(|cx| {
+                let _ = cx.update(|_window, cx| {
                     view.update(cx, |view, cx| {
                         if view.opacity >= 1.0 {
                             stop = true;
@@ -168,7 +168,7 @@ fn main() {
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
                     ..Default::default()
                 },
-                |cx| cx.new_view(HelloWorld::new),
+                |window, cx| window.new_view(cx, HelloWorld::new),
             )
             .unwrap();
         });

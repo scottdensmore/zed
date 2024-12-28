@@ -62,7 +62,10 @@ impl CellControl {
 }
 
 impl Clickable for CellControl {
-    fn on_click(self, handler: impl Fn(&gpui::ClickEvent, &mut WindowContext) + 'static) -> Self {
+    fn on_click(
+        self,
+        handler: impl Fn(&gpui::ClickEvent, &mut Window, &mut AppContext) + 'static,
+    ) -> Self {
         let button = self.button.on_click(handler);
         Self { button }
     }
@@ -80,23 +83,29 @@ pub enum Cell {
     Raw(View<RawCell>),
 }
 
-fn convert_outputs(outputs: &Vec<nbformat::v4::Output>, cx: &mut WindowContext) -> Vec<Output> {
+fn convert_outputs(
+    outputs: &Vec<nbformat::v4::Output>,
+    window: &mut Window,
+    cx: &mut AppContext,
+) -> Vec<Output> {
     outputs
         .into_iter()
         .map(|output| match output {
             nbformat::v4::Output::Stream { text, .. } => Output::Stream {
-                content: cx.new_view(|cx| TerminalOutput::from(&text.0, cx)),
+                content: window.new_view(cx, |cx| TerminalOutput::from(&text.0, cx)),
             },
             nbformat::v4::Output::DisplayData(display_data) => {
-                Output::new(&display_data.data, None, cx)
+                Output::new(&display_data.data, None, window, cx)
             }
             nbformat::v4::Output::ExecuteResult(execute_result) => {
-                Output::new(&execute_result.data, None, cx)
+                Output::new(&execute_result.data, None, window, cx)
             }
             nbformat::v4::Output::Error(error) => Output::ErrorOutput(ErrorView {
                 ename: error.ename.clone(),
                 evalue: error.evalue.clone(),
-                traceback: cx.new_view(|cx| TerminalOutput::from(&error.traceback.join("\n"), cx)),
+                traceback: window.new_view(cx, |cx| {
+                    TerminalOutput::from(&error.traceback.join("\n"), cx)
+                }),
             }),
         })
         .collect()
@@ -107,7 +116,8 @@ impl Cell {
         cell: &nbformat::v4::Cell,
         languages: &Arc<LanguageRegistry>,
         notebook_language: Shared<Task<Option<Arc<Language>>>>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Self {
         match cell {
             nbformat::v4::Cell::Markdown {
@@ -118,7 +128,7 @@ impl Cell {
             } => {
                 let source = source.join("");
 
-                let view = cx.new_view(|cx| {
+                let view = window.new_view(cx, |cx| {
                     let markdown_parsing_task = {
                         let languages = languages.clone();
                         let source = source.clone();
@@ -158,7 +168,7 @@ impl Cell {
                 execution_count,
                 source,
                 outputs,
-            } => Cell::Code(cx.new_view(|cx| {
+            } => Cell::Code(window.new_view(cx, |cx| {
                 let text = source.join("");
 
                 let buffer = cx.new_model(|cx| Buffer::local(text.clone(), cx));
@@ -216,7 +226,7 @@ impl Cell {
                 id,
                 metadata,
                 source,
-            } => Cell::Raw(cx.new_view(|_| RawCell {
+            } => Cell::Raw(window.new_view(cx, |_| RawCell {
                 id: id.clone(),
                 metadata: metadata.clone(),
                 source: source.join(""),

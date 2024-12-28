@@ -56,13 +56,14 @@ impl FocusableView for TextField {
 
 impl TextField {
     pub fn new(
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
         label: impl Into<SharedString>,
         placeholder: impl Into<SharedString>,
     ) -> Self {
         let placeholder_text = placeholder.into();
 
-        let editor = cx.new_view(|cx| {
+        let editor = window.new_view(cx, |cx| {
             let mut input = Editor::single_line(cx);
             input.set_placeholder_text(placeholder_text.clone(), cx);
             input

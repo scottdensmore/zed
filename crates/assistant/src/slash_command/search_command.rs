@@ -59,7 +59,8 @@ impl SlashCommand for SearchSlashCommand {
         _arguments: &[String],
         _cancel: Arc<AtomicBool>,
         _workspace: Option<WeakView<Workspace>>,
-        _cx: &mut WindowContext,
+        _window: &mut Window,
+        _cx: &mut AppContext,
     ) -> Task<Result<Vec<ArgumentCompletion>>> {
         Task::ready(Ok(Vec::new()))
     }
@@ -71,7 +72,8 @@ impl SlashCommand for SearchSlashCommand {
         _context_buffer: language::BufferSnapshot,
         workspace: WeakView<Workspace>,
         _delegate: Option<Arc<dyn LspAdapterDelegate>>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<SlashCommandResult> {
         let Some(workspace) = workspace.upgrade() else {
             return Task::ready(Err(anyhow::anyhow!("workspace was dropped")));
@@ -101,13 +103,13 @@ impl SlashCommand for SearchSlashCommand {
 
         let project = workspace.read(cx).project().clone();
         let fs = project.read(cx).fs().clone();
-        let Some(project_index) =
-            cx.update_global(|index: &mut SemanticDb, cx| index.project_index(project, cx))
+        let Some(project_index) = cx
+            .update_global(|index: &mut SemanticDb, _window, cx| index.project_index(project, cx))
         else {
             return Task::ready(Err(anyhow::anyhow!("no project indexer")));
         };
 
-        cx.spawn(|cx| async move {
+        window.spawn(cx, |cx| async move {
             let results = project_index
                 .read_with(&cx, |project_index, cx| {
                     project_index.search(vec![query.clone()], limit.unwrap_or(5), cx)

@@ -17,13 +17,13 @@ pub trait ModalView: ManagedView {
 }
 
 trait ModalViewHandle {
-    fn on_before_dismiss(&mut self, cx: &mut WindowContext) -> DismissDecision;
+    fn on_before_dismiss(&mut self, _window: &mut Window, cx: &mut AppContext) -> DismissDecision;
     fn view(&self) -> AnyView;
-    fn fade_out_background(&self, cx: &WindowContext) -> bool;
+    fn fade_out_background(&self, _window: &Window, cx: &AppContext) -> bool;
 }
 
 impl<V: ModalView> ModalViewHandle for View<V> {
-    fn on_before_dismiss(&mut self, cx: &mut WindowContext) -> DismissDecision {
+    fn on_before_dismiss(&mut self, _window: &mut Window, cx: &mut AppContext) -> DismissDecision {
         self.update(cx, |this, cx| this.on_before_dismiss(cx))
     }
 
@@ -31,7 +31,7 @@ impl<V: ModalView> ModalViewHandle for View<V> {
         self.clone().into()
     }
 
-    fn fade_out_background(&self, cx: &WindowContext) -> bool {
+    fn fade_out_background(&self, _window: &Window, cx: &AppContext) -> bool {
         self.read(cx).fade_out_background()
     }
 }

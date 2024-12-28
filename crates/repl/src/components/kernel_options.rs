@@ -16,7 +16,7 @@ use gpui::SharedString;
 use gpui::Task;
 use ui::{prelude::*, ListItem, PopoverMenu, PopoverMenuHandle, PopoverTrigger};
 
-type OnSelect = Box<dyn Fn(KernelSpecification, &mut WindowContext)>;
+type OnSelect = Box<dyn Fn(KernelSpecification, &mut Window, &mut AppContext)>;
 
 #[derive(IntoElement)]
 pub struct KernelSelector<T: PopoverTrigger> {
@@ -89,7 +89,7 @@ impl PickerDelegate for KernelPickerDelegate {
         cx.notify();
     }
 
-    fn placeholder_text(&self, _cx: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, _window: &mut Window, _cx: &mut AppContext) -> Arc<str> {
         "Select a kernel...".into()
     }
 
@@ -218,7 +218,7 @@ impl PickerDelegate for KernelPickerDelegate {
                         .icon_size(IconSize::XSmall)
                         .icon_color(Color::Muted)
                         .icon_position(IconPosition::End)
-                        .on_click(move |_, cx| cx.open_url(KERNEL_DOCS_URL)),
+                        .on_click(move |_, _window, cx| cx.open_url(KERNEL_DOCS_URL)),
                 )
                 .into_any(),
         )
@@ -226,7 +226,7 @@ impl PickerDelegate for KernelPickerDelegate {
 }
 
 impl<T: PopoverTrigger> RenderOnce for KernelSelector<T> {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut AppContext) -> impl IntoElement {
         let store = ReplStore::global(cx).read(cx);
 
         let all_kernels: Vec<KernelSpecification> = store
@@ -243,7 +243,7 @@ impl<T: PopoverTrigger> RenderOnce for KernelSelector<T> {
             selected_kernelspec,
         };
 
-        let picker_view = cx.new_view(|cx| {
+        let picker_view = window.new_view(cx, |cx| {
             let picker = Picker::uniform_list(delegate, cx)
                 .width(rems(30.))
                 .max_height(Some(rems(20.).into()));
@@ -251,7 +251,7 @@ impl<T: PopoverTrigger> RenderOnce for KernelSelector<T> {
         });
 
         PopoverMenu::new("kernel-switcher")
-            .menu(move |_cx| Some(picker_view.clone()))
+            .menu(move |_window, _cx| Some(picker_view.clone()))
             .trigger(self.trigger)
             .attach(gpui::Corner::BottomLeft)
             .when_some(self.handle, |menu, handle| menu.with_handle(handle))

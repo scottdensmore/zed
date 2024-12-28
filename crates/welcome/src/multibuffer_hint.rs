@@ -111,7 +111,7 @@ impl ToolbarItemView for MultibufferHint {
         let this = cx.view().downgrade();
         self.subscription = Some(active_pane_item.subscribe_to_item_events(
             cx,
-            Box::new(move |event, cx| {
+            Box::new(move |event, _window, cx| {
                 if let ItemEvent::UpdateBreadcrumbs = event {
                     this.update(cx, |this, cx| {
                         cx.notify();
@@ -149,7 +149,7 @@ impl Render for MultibufferHint {
                                     .child(Label::new("Read more…"))
                                     .child(Icon::new(IconName::ArrowUpRight).size(IconSize::Small)),
                             )
-                            .on_click(move |_event, cx| {
+                            .on_click(move |_event, _window, cx| {
                                 cx.open_url("https://zed.dev/docs/multibuffers")
                             }),
                     ),
@@ -165,7 +165,7 @@ impl Render for MultibufferHint {
                             ToolbarItemLocation::Hidden,
                         ))
                     }))
-                    .tooltip(move |cx| Tooltip::text("Dismiss this hint", cx)),
+                    .tooltip(move |window, cx| Tooltip::text("Dismiss this hint", window, cx)),
             )
             .into_any_element()
     }

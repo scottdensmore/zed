@@ -286,7 +286,12 @@ impl MarkdownElement {
         }
     }
 
-    fn load_language(&self, name: &str, cx: &mut WindowContext) -> Option<Arc<Language>> {
+    fn load_language(
+        &self,
+        name: &str,
+        window: &mut Window,
+        cx: &mut AppContext,
+    ) -> Option<Arc<Language>> {
         let language_test = self.language_registry.as_ref()?.language_for_name(name);
 
         let language_name = match language_test.now_or_never() {
@@ -308,11 +313,12 @@ impl MarkdownElement {
             Some(language) => language,
             None => {
                 let markdown = self.markdown.downgrade();
-                cx.spawn(|mut cx| async move {
-                    language.await;
-                    markdown.update(&mut cx, |_, cx| cx.notify())
-                })
-                .detach_and_log_err(cx);
+                window
+                    .spawn(cx, |mut cx| async move {
+                        language.await;
+                        markdown.update(&mut cx, |_, cx| cx.notify())
+                    })
+                    .detach_and_log_err(cx);
                 None
             }
         }
@@ -322,7 +328,8 @@ impl MarkdownElement {
         &self,
         bounds: Bounds<Pixels>,
         rendered_text: &RenderedText,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) {
         let selection = self.markdown.read(cx).selection;
         let selection_start = rendered_text.position_for_source_index(selection.start);
@@ -332,51 +339,63 @@ impl MarkdownElement {
             selection_start.zip(selection_end)
         {
             if start_position.y == end_position.y {
-                cx.paint_quad(quad(
-                    Bounds::from_corners(
-                        start_position,
-                        point(end_position.x, end_position.y + end_line_height),
-                    ),
-                    Pixels::ZERO,
-                    self.style.selection_background_color,
-                    Edges::default(),
-                    Hsla::transparent_black(),
-                ));
-            } else {
-                cx.paint_quad(quad(
-                    Bounds::from_corners(
-                        start_position,
-                        point(bounds.right(), start_position.y + start_line_height),
-                    ),
-                    Pixels::ZERO,
-                    self.style.selection_background_color,
-                    Edges::default(),
-                    Hsla::transparent_black(),
-                ));
-
-                if end_position.y > start_position.y + start_line_height {
-                    cx.paint_quad(quad(
+                window.paint_quad(
+                    quad(
                         Bounds::from_corners(
-                            point(bounds.left(), start_position.y + start_line_height),
-                            point(bounds.right(), end_position.y),
+                            start_position,
+                            point(end_position.x, end_position.y + end_line_height),
                         ),
                         Pixels::ZERO,
                         self.style.selection_background_color,
                         Edges::default(),
                         Hsla::transparent_black(),
-                    ));
+                    ),
+                    cx,
+                );
+            } else {
+                window.paint_quad(
+                    quad(
+                        Bounds::from_corners(
+                            start_position,
+                            point(bounds.right(), start_position.y + start_line_height),
+                        ),
+                        Pixels::ZERO,
+                        self.style.selection_background_color,
+                        Edges::default(),
+                        Hsla::transparent_black(),
+                    ),
+                    cx,
+                );
+
+                if end_position.y > start_position.y + start_line_height {
+                    window.paint_quad(
+                        quad(
+                            Bounds::from_corners(
+                                point(bounds.left(), start_position.y + start_line_height),
+                                point(bounds.right(), end_position.y),
+                            ),
+                            Pixels::ZERO,
+                            self.style.selection_background_color,
+                            Edges::default(),
+                            Hsla::transparent_black(),
+                        ),
+                        cx,
+                    );
                 }
 
-                cx.paint_quad(quad(
-                    Bounds::from_corners(
-                        point(bounds.left(), end_position.y),
-                        point(end_position.x, end_position.y + end_line_height),
+                window.paint_quad(
+                    quad(
+                        Bounds::from_corners(
+                            point(bounds.left(), end_position.y),
+                            point(end_position.x, end_position.y + end_line_height),
+                        ),
+                        Pixels::ZERO,
+                        self.style.selection_background_color,
+                        Edges::default(),
+                        Hsla::transparent_black(),
                     ),
-                    Pixels::ZERO,
-                    self.style.selection_background_color,
-                    Edges::default(),
-                    Hsla::transparent_black(),
-                ));
+                    cx,
+                );
             }
         }
     }
@@ -385,21 +404,22 @@ impl MarkdownElement {
         &self,
         hitbox: &Hitbox,
         rendered_text: &RenderedText,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) {
-        let is_hovering_link = hitbox.is_hovered(cx)
+        let is_hovering_link = hitbox.is_hovered(window, cx)
             && !self.markdown.read(cx).selection.pending
             && rendered_text
-                .link_for_position(cx.mouse_position())
+                .link_for_position(window.mouse_position(cx))
                 .is_some();
 
         if is_hovering_link {
-            cx.set_cursor_style(CursorStyle::PointingHand, hitbox);
+            window.set_cursor_style(CursorStyle::PointingHand, hitbox, cx);
         } else {
-            cx.set_cursor_style(CursorStyle::IBeam, hitbox);
+            window.set_cursor_style(CursorStyle::IBeam, hitbox, cx);
         }
 
-        self.on_mouse_event(cx, {
+        self.on_mouse_event(window, cx, {
             let rendered_text = rendered_text.clone();
             let hitbox = hitbox.clone();
             move |markdown, event: &MouseDownEvent, phase, cx| {
@@ -438,7 +458,7 @@ impl MarkdownElement {
                 }
             }
         });
-        self.on_mouse_event(cx, {
+        self.on_mouse_event(window, cx, {
             let rendered_text = rendered_text.clone();
             let hitbox = hitbox.clone();
             let was_hovering_link = is_hovering_link;
@@ -464,7 +484,7 @@ impl MarkdownElement {
                 }
             }
         });
-        self.on_mouse_event(cx, {
+        self.on_mouse_event(window, cx, {
             let rendered_text = rendered_text.clone();
             move |markdown, event: &MouseUpEvent, phase, cx| {
                 if phase.bubble() {
@@ -487,36 +507,45 @@ impl MarkdownElement {
         });
     }
 
-    fn autoscroll(&self, rendered_text: &RenderedText, cx: &mut WindowContext) -> Option<()> {
+    fn autoscroll(
+        &self,
+        rendered_text: &RenderedText,
+        window: &mut Window,
+        cx: &mut AppContext,
+    ) -> Option<()> {
         let autoscroll_index = self
             .markdown
             .update(cx, |markdown, _| markdown.autoscroll_request.take())?;
         let (position, line_height) = rendered_text.position_for_source_index(autoscroll_index)?;
 
         let text_style = self.style.base_text_style.clone();
-        let font_id = cx.text_system().resolve_font(&text_style.font());
-        let font_size = text_style.font_size.to_pixels(cx.rem_size());
-        let em_width = cx
-            .text_system()
+        let font_id = window.text_system(cx).resolve_font(&text_style.font());
+        let font_size = text_style.font_size.to_pixels(window.rem_size(cx));
+        let em_width = window
+            .text_system(cx)
             .typographic_bounds(font_id, font_size, 'm')
             .unwrap()
             .size
             .width;
-        cx.request_autoscroll(Bounds::from_corners(
-            point(position.x - 3. * em_width, position.y - 3. * line_height),
-            point(position.x + 3. * em_width, position.y + 3. * line_height),
-        ));
+        window.request_autoscroll(
+            Bounds::from_corners(
+                point(position.x - 3. * em_width, position.y - 3. * line_height),
+                point(position.x + 3. * em_width, position.y + 3. * line_height),
+            ),
+            cx,
+        );
         Some(())
     }
 
     fn on_mouse_event<T: MouseEvent>(
         &self,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
         mut f: impl 'static + FnMut(&mut Markdown, &T, DispatchPhase, &mut ViewContext<Markdown>),
     ) {
-        cx.on_mouse_event({
+        window.on_mouse_event(cx, {
             let markdown = self.markdown.downgrade();
-            move |event, phase, cx| {
+            move |event, phase, _window, cx| {
                 markdown
                     .update(cx, |markdown, cx| f(markdown, event, phase, cx))
                     .log_err();
@@ -536,7 +565,8 @@ impl Element for MarkdownElement {
     fn request_layout(
         &mut self,
         _id: Option<&GlobalElementId>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> (gpui::LayoutId, Self::RequestLayoutState) {
         let mut builder = MarkdownElementBuilder::new(
             self.style.base_text_style.clone(),
@@ -588,7 +618,7 @@ impl Element for MarkdownElement {
                         }
                         MarkdownTag::CodeBlock(kind) => {
                             let language = if let CodeBlockKind::Fenced(language) = kind {
-                                self.load_language(language.as_ref(), cx)
+                                self.load_language(language.as_ref(), window, cx)
                             } else {
                                 None
                             };
@@ -728,8 +758,8 @@ impl Element for MarkdownElement {
             }
         }
         let mut rendered_markdown = builder.build();
-        let child_layout_id = rendered_markdown.element.request_layout(cx);
-        let layout_id = cx.request_layout(gpui::Style::default(), [child_layout_id]);
+        let child_layout_id = rendered_markdown.element.request_layout(window, cx);
+        let layout_id = window.request_layout(gpui::Style::default(), [child_layout_id], cx);
         (layout_id, rendered_markdown)
     }
 
@@ -738,14 +768,15 @@ impl Element for MarkdownElement {
         _id: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         rendered_markdown: &mut Self::RequestLayoutState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Self::PrepaintState {
         let focus_handle = self.markdown.read(cx).focus_handle.clone();
-        cx.set_focus_handle(&focus_handle);
+        window.set_focus_handle(&focus_handle, cx);
 
-        let hitbox = cx.insert_hitbox(bounds, false);
-        rendered_markdown.element.prepaint(cx);
-        self.autoscroll(&rendered_markdown.text, cx);
+        let hitbox = window.insert_hitbox(bounds, false, cx);
+        rendered_markdown.element.prepaint(window, cx);
+        self.autoscroll(&rendered_markdown.text, window, cx);
         hitbox
     }
 
@@ -755,15 +786,16 @@ impl Element for MarkdownElement {
         bounds: Bounds<Pixels>,
         rendered_markdown: &mut Self::RequestLayoutState,
         hitbox: &mut Self::PrepaintState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) {
         let mut context = KeyContext::default();
         context.add("Markdown");
-        cx.set_key_context(context);
+        window.set_key_context(context, cx);
         let view = self.markdown.clone();
-        cx.on_action(std::any::TypeId::of::<crate::Copy>(), {
+        window.on_action(std::any::TypeId::of::<crate::Copy>(), cx, {
             let text = rendered_markdown.text.clone();
-            move |_, phase, cx| {
+            move |_, phase, _window, cx| {
                 let text = text.clone();
                 if phase == DispatchPhase::Bubble {
                     view.update(cx, move |this, cx| this.copy(&text, cx))
@@ -771,9 +803,9 @@ impl Element for MarkdownElement {
             }
         });
 
-        self.paint_mouse_listeners(hitbox, &rendered_markdown.text, cx);
-        rendered_markdown.element.paint(cx);
-        self.paint_selection(bounds, &rendered_markdown.text, cx);
+        self.paint_mouse_listeners(hitbox, &rendered_markdown.text, window, cx);
+        rendered_markdown.element.paint(window, cx);
+        self.paint_selection(bounds, &rendered_markdown.text, window, cx);
     }
 }
 

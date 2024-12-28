@@ -228,8 +228,9 @@ impl LanguageModelProvider for AnthropicLanguageModelProvider {
         self.state.update(cx, |state, cx| state.authenticate(cx))
     }
 
-    fn configuration_view(&self, cx: &mut WindowContext) -> AnyView {
-        cx.new_view(|cx| ConfigurationView::new(self.state.clone(), cx))
+    fn configuration_view(&self, window: &mut Window, cx: &mut AppContext) -> AnyView {
+        window
+            .new_view(cx, |cx| ConfigurationView::new(self.state.clone(), cx))
             .into()
     }
 
@@ -690,7 +691,7 @@ impl Render for ConfigurationView {
                         .icon(IconName::ExternalLink)
                         .icon_size(IconSize::XSmall)
                         .icon_color(Color::Muted)
-                        .on_click(move |_, cx| cx.open_url(ANTHROPIC_CONSOLE_URL))
+                        .on_click(move |_, _window, cx| cx.open_url(ANTHROPIC_CONSOLE_URL))
                     )
                 )
                 .child(Label::new(INSTRUCTIONS[2]))
@@ -732,7 +733,7 @@ impl Render for ConfigurationView {
                         .icon_position(IconPosition::Start)
                         .disabled(env_var_set)
                         .when(env_var_set, |this| {
-                            this.tooltip(|cx| Tooltip::text(format!("To reset your API key, unset the {ANTHROPIC_API_KEY_VAR} environment variable."), cx))
+                            this.tooltip(|window, cx| Tooltip::text(format!("To reset your API key, unset the {ANTHROPIC_API_KEY_VAR} environment variable."), window, cx))
                         })
                         .on_click(cx.listener(|this, _, cx| this.reset_api_key(cx))),
                 )

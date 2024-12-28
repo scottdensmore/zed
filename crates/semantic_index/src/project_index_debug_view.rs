@@ -119,7 +119,7 @@ impl ProjectIndexDebugView {
                         chunks.len(),
                         gpui::ListAlignment::Top,
                         px(100.),
-                        move |ix, cx| {
+                        move |ix, _window, cx| {
                             if let Some(view) = view.upgrade() {
                                 view.update(cx, |view, cx| view.render_chunk(ix, cx))
                             } else {
@@ -260,12 +260,12 @@ impl Render for ProjectIndexDebugView {
             .into_any_element();
 
             canvas(
-                move |bounds, cx| {
-                    list.prepaint_as_root(bounds.origin, bounds.size.into(), cx);
+                move |bounds, window, cx| {
+                    list.prepaint_as_root(bounds.origin, bounds.size.into(), window, cx);
                     list
                 },
-                |_, mut list, cx| {
-                    list.paint(cx);
+                |_, mut list, window, cx| {
+                    list.paint(window, cx);
                 },
             )
             .size_full()
@@ -279,7 +279,7 @@ impl EventEmitter<()> for ProjectIndexDebugView {}
 impl Item for ProjectIndexDebugView {
     type Event = ();
 
-    fn tab_content_text(&self, _cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, _cx: &AppContext) -> Option<SharedString> {
         Some("Project Index (Debug)".into())
     }
 

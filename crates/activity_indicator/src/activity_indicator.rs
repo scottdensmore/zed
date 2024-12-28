@@ -480,7 +480,9 @@ impl Render for ActivityIndicator {
                                             ))
                                             .size(LabelSize::Small),
                                         )
-                                        .tooltip(move |cx| Tooltip::text(&content.message, cx))
+                                        .tooltip(move |window, cx| {
+                                            Tooltip::text(&content.message, window, cx)
+                                        })
                                 } else {
                                     button.child(Label::new(content.message).size(LabelSize::Small))
                                 }
@@ -494,10 +496,10 @@ impl Render for ActivityIndicator {
                     ),
                 )
                 .anchor(gpui::Corner::BottomLeft)
-                .menu(move |cx| {
+                .menu(move |window, cx| {
                     let strong_this = this.upgrade()?;
                     let mut has_work = false;
-                    let menu = ContextMenu::build(cx, |mut menu, cx| {
+                    let menu = ContextMenu::build(window, cx, |mut menu, cx| {
                         for work in strong_this.read(cx).pending_language_server_work(cx) {
                             has_work = true;
                             let this = this.clone();
@@ -521,7 +523,7 @@ impl Render for ActivityIndicator {
                                             .child(Icon::new(IconName::XCircle))
                                             .into_any_element()
                                     },
-                                    move |cx| {
+                                    move |_window, cx| {
                                         this.update(cx, |this, cx| {
                                             this.project.update(cx, |project, cx| {
                                                 project.cancel_language_server_work(

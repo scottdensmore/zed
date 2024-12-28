@@ -68,7 +68,7 @@ use std::{
 use sum_tree::{Bias, TreeMap};
 use tab_map::{TabMap, TabSnapshot};
 use text::LineIndent;
-use ui::{px, SharedString, WindowContext};
+use ui::{px, SharedString, Window};
 use unicode_segmentation::UnicodeSegmentation;
 use wrap_map::{WrapMap, WrapSnapshot};
 
@@ -78,7 +78,7 @@ pub enum FoldStatus {
     Foldable,
 }
 
-pub type RenderFoldToggle = Arc<dyn Fn(FoldStatus, &mut WindowContext) -> AnyElement>;
+pub type RenderFoldToggle = Arc<dyn Fn(FoldStatus, &mut Window, &mut AppContext) -> AnyElement>;
 
 pub trait ToDisplayPoint {
     fn to_display_point(&self, map: &DisplaySnapshot) -> DisplayPoint;
@@ -2624,8 +2624,8 @@ pub mod tests {
                 [Crease::inline(
                     range,
                     FoldPlaceholder::test(),
-                    |_row, _status, _toggle, _cx| div(),
-                    |_row, _status, _cx| div(),
+                    |_row, _status, _toggle, _window, _cx| div(),
+                    |_row, _status, _window, _cx| div(),
                 )],
                 &map.buffer.read(cx).snapshot(cx),
             );

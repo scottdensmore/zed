@@ -612,7 +612,9 @@ fn test_clone(cx: &mut TestAppContext) {
 
     let cloned_editor = editor
         .update(cx, |editor, cx| {
-            cx.open_window(Default::default(), |cx| cx.new_view(|cx| editor.clone(cx)))
+            cx.open_window(Default::default(), |window, cx| {
+                window.new_view(cx, |cx| editor.clone(cx))
+            })
         })
         .unwrap()
         .unwrap();
@@ -670,8 +672,16 @@ async fn test_navigation_history(cx: &mut TestAppContext) {
             let handle = cx.view();
             editor.set_nav_history(Some(pane.read(cx).nav_history_for_item(handle)));
 
-            fn pop_history(editor: &mut Editor, cx: &mut WindowContext) -> Option<NavigationEntry> {
-                editor.nav_history.as_mut().unwrap().pop_backward(cx)
+            fn pop_history(
+                editor: &mut Editor,
+                window: &mut Window,
+                cx: &mut AppContext,
+            ) -> Option<NavigationEntry> {
+                editor
+                    .nav_history
+                    .as_mut()
+                    .unwrap()
+                    .pop_backward(window, cx)
             }
 
             // Move the cursor a small distance.
@@ -5609,7 +5619,7 @@ async fn test_autoindent_selections(cx: &mut gpui::TestAppContext) {
         });
         cx.run_until_parked();
 
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             pretty_assertions::assert_eq!(
                 buffer.read(cx).text(),
                 indoc! { "
@@ -7878,8 +7888,8 @@ async fn test_handle_input_with_different_show_signature_settings(cx: &mut gpui:
     };
 
     // Ensure that signature_help is called when enabled afte edits
-    cx.update(|cx| {
-        cx.update_global::<SettingsStore, _>(|settings, cx| {
+    cx.update(|_window, cx| {
+        cx.update_global::<SettingsStore, _>(|settings, _window, cx| {
             settings.update_user_settings::<EditorSettings>(cx, |settings| {
                 settings.auto_signature_help = Some(false);
                 settings.show_signature_help_after_edits = Some(true);
@@ -7920,8 +7930,8 @@ async fn test_handle_input_with_different_show_signature_settings(cx: &mut gpui:
     });
 
     // Ensure that signature_help is called when auto signature help override is enabled
-    cx.update(|cx| {
-        cx.update_global::<SettingsStore, _>(|settings, cx| {
+    cx.update(|_window, cx| {
+        cx.update_global::<SettingsStore, _>(|settings, _window, cx| {
             settings.update_user_settings::<EditorSettings>(cx, |settings| {
                 settings.auto_signature_help = Some(true);
                 settings.show_signature_help_after_edits = Some(false);
@@ -9641,7 +9651,7 @@ async fn test_following(cx: &mut gpui::TestAppContext) {
                 ))),
                 ..Default::default()
             },
-            |cx| cx.new_view(|cx| build_editor(buffer.clone(), cx)),
+            |window, cx| window.new_view(cx, |cx| build_editor(buffer.clone(), cx)),
         )
         .unwrap()
     });
@@ -9804,7 +9814,7 @@ async fn test_following_with_multiple_excerpts(cx: &mut gpui::TestAppContext) {
     // Start following the editor when it has no excerpts.
     let mut state_message = leader.update(cx, |leader, cx| leader.to_state_proto(cx));
     let follower_1 = cx
-        .update_window(*workspace.deref(), |_, cx| {
+        .update_window(*workspace.deref(), |_, window, cx| {
             Editor::from_state_proto(
                 workspace.root_view(cx).unwrap(),
                 ViewId {
@@ -9812,6 +9822,7 @@ async fn test_following_with_multiple_excerpts(cx: &mut gpui::TestAppContext) {
                     id: 0,
                 },
                 &mut state_message,
+                window,
                 cx,
             )
         })
@@ -9895,7 +9906,7 @@ async fn test_following_with_multiple_excerpts(cx: &mut gpui::TestAppContext) {
     // Start following separately after it already has excerpts.
     let mut state_message = leader.update(cx, |leader, cx| leader.to_state_proto(cx));
     let follower_2 = cx
-        .update_window(*workspace.deref(), |_, cx| {
+        .update_window(*workspace.deref(), |_, window, cx| {
             Editor::from_state_proto(
                 workspace.root_view(cx).unwrap().clone(),
                 ViewId {
@@ -9903,6 +9914,7 @@ async fn test_following_with_multiple_excerpts(cx: &mut gpui::TestAppContext) {
                     id: 0,
                 },
                 &mut state_message,
+                window,
                 cx,
             )
         })
@@ -9960,7 +9972,7 @@ async fn go_to_prev_overlapping_diagnostic(
         }
     "});
 
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         lsp_store.update(cx, |lsp_store, cx| {
             lsp_store
                 .update_diagnostics(
@@ -10054,7 +10066,7 @@ async fn test_diagnostics_with_links(cx: &mut TestAppContext) {
     let lsp_store =
         cx.update_editor(|editor, cx| editor.project.as_ref().unwrap().read(cx).lsp_store());
 
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         lsp_store.update(cx, |lsp_store, cx| {
             lsp_store.update_diagnostics(
                 LanguageServerId(0),
@@ -13725,7 +13737,7 @@ fn test_crease_insertion_and_rendering(cx: &mut TestAppContext) {
             struct RenderArgs {
                 row: MultiBufferRow,
                 folded: bool,
-                callback: Arc<dyn Fn(bool, &mut WindowContext) + Send + Sync>,
+                callback: Arc<dyn Fn(bool, &mut Window, &mut AppContext) + Send + Sync>,
             }
 
             let crease = Crease::inline(
@@ -13733,7 +13745,7 @@ fn test_crease_insertion_and_rendering(cx: &mut TestAppContext) {
                 FoldPlaceholder::test(),
                 {
                     let toggle_callback = render_args.clone();
-                    move |row, folded, callback, _cx| {
+                    move |row, folded, callback, _window, _cx| {
                         *toggle_callback.lock() = Some(RenderArgs {
                             row,
                             folded,
@@ -13742,7 +13754,7 @@ fn test_crease_insertion_and_rendering(cx: &mut TestAppContext) {
                         div()
                     }
                 },
-                |_row, _folded, _cx| div(),
+                |_row, _folded, _window, _cx| div(),
             );
 
             editor.insert_creases(Some(crease), cx);
@@ -13758,13 +13770,17 @@ fn test_crease_insertion_and_rendering(cx: &mut TestAppContext) {
     assert!(!render_args.folded);
     assert!(!snapshot.is_line_folded(MultiBufferRow(1)));
 
-    cx.update_window(*editor, |_, cx| (render_args.callback)(true, cx))
-        .unwrap();
+    cx.update_window(*editor, |_, window, cx| {
+        (render_args.callback)(true, window, cx)
+    })
+    .unwrap();
     let snapshot = editor.update(cx, |editor, cx| editor.snapshot(cx)).unwrap();
     assert!(snapshot.is_line_folded(MultiBufferRow(1)));
 
-    cx.update_window(*editor, |_, cx| (render_args.callback)(false, cx))
-        .unwrap();
+    cx.update_window(*editor, |_, window, cx| {
+        (render_args.callback)(false, window, cx)
+    })
+    .unwrap();
     let snapshot = editor.update(cx, |editor, cx| editor.snapshot(cx)).unwrap();
     assert!(!snapshot.is_line_folded(MultiBufferRow(1)));
 }

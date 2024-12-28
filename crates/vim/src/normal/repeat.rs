@@ -8,7 +8,7 @@ use crate::{
     Vim,
 };
 use editor::Editor;
-use gpui::{actions, Action, ViewContext, WindowContext};
+use gpui::{actions, Action, AppContext, ViewContext, Window};
 use util::ResultExt;
 use workspace::Workspace;
 
@@ -88,7 +88,12 @@ impl Replayer {
         })))
     }
 
-    pub fn replay(&mut self, actions: Vec<ReplayableAction>, cx: &mut WindowContext) {
+    pub fn replay(
+        &mut self,
+        actions: Vec<ReplayableAction>,
+        window: &mut Window,
+        cx: &mut AppContext,
+    ) {
         let mut lock = self.0.borrow_mut();
         let range = lock.ix..lock.ix;
         lock.actions.splice(range, actions);
@@ -97,14 +102,14 @@ impl Replayer {
         }
         lock.running = true;
         let this = self.clone();
-        cx.defer(move |cx| this.next(cx))
+        window.defer(cx, move |window, cx| this.next(window, cx))
     }
 
     pub fn stop(self) {
         self.0.borrow_mut().actions.clear()
     }
 
-    pub fn next(self, cx: &mut WindowContext) {
+    pub fn next(self, window: &mut Window, cx: &mut AppContext) {
         let mut lock = self.0.borrow_mut();
         let action = if lock.ix < 10000 {
             lock.actions.get(lock.ix).cloned()
@@ -121,16 +126,19 @@ impl Replayer {
         match action {
             ReplayableAction::Action(action) => {
                 if should_replay(&*action) {
-                    cx.dispatch_action(action.boxed_clone());
-                    cx.defer(move |cx| Vim::globals(cx).observe_action(action.boxed_clone()));
+                    window.dispatch_action(action.boxed_clone(), cx);
+                    window.defer(cx, move |_window, cx| {
+                        Vim::globals(cx).observe_action(action.boxed_clone())
+                    });
                 }
             }
             ReplayableAction::Insertion {
                 text,
                 utf16_range_to_replace,
             } => {
-                cx.window_handle()
-                    .update(cx, |handle, cx| {
+                window
+                    .window_handle(cx)
+                    .update(cx, |handle, _window, cx| {
                         let Ok(workspace) = handle.downcast::<Workspace>() else {
                             return;
                         };
@@ -148,7 +156,7 @@ impl Replayer {
                     .log_err();
             }
         }
-        cx.defer(move |cx| self.next(cx));
+        window.defer(cx, move |window, cx| self.next(window, cx));
     }
 }
 

@@ -511,8 +511,12 @@ impl Render for FeedbackModal {
                                     .on_click(cx.listener(|this, _, cx| {
                                         this.submit(cx).detach();
                                     }))
-                                    .tooltip(move |cx| {
-                                        Tooltip::text("Submit feedback to the Zed team.", cx)
+                                    .tooltip(move |window, cx| {
+                                        Tooltip::text(
+                                            "Submit feedback to the Zed team.",
+                                            window,
+                                            cx,
+                                        )
                                     })
                                     .when(!self.can_submit(), |this| this.disabled(true)),
                             ),

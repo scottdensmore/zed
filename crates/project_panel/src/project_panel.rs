@@ -27,7 +27,7 @@ use gpui::{
     InteractiveElement, KeyContext, ListHorizontalSizingBehavior, ListSizingBehavior, Model,
     MouseButton, MouseDownEvent, ParentElement, Pixels, Point, PromptLevel, Render, ScrollStrategy,
     Stateful, Styled, Subscription, Task, UniformListScrollHandle, View, ViewContext,
-    VisualContext as _, WeakView, WindowContext,
+    VisualContext as _, WeakView, Window,
 };
 use indexmap::IndexMap;
 use menu::{Confirm, SelectFirst, SelectLast, SelectNext, SelectPrev};
@@ -3279,15 +3279,18 @@ impl ProjectPanel {
                     },
                 ))
             })
-            .on_drag(dragged_selection, move |selection, click_offset, cx| {
-                cx.new_view(|_| DraggedProjectEntryView {
-                    details: details.clone(),
-                    width,
-                    click_offset,
-                    selection: selection.active_selection,
-                    selections: selection.marked_selections.clone(),
-                })
-            })
+            .on_drag(
+                dragged_selection,
+                move |selection, click_offset, window, cx| {
+                    window.new_view(cx, |_| DraggedProjectEntryView {
+                        details: details.clone(),
+                        width,
+                        click_offset,
+                        selection: selection.active_selection,
+                        selections: selection.marked_selections.clone(),
+                    })
+                },
+            )
             .drag_over::<DraggedSelection>(move |style, _, _| style.bg(item_colors.drag_over))
             .on_drop(cx.listener(move |this, selections: &DraggedSelection, cx| {
                 this.hover_scroll_task.take();
@@ -3370,8 +3373,14 @@ impl ProjectPanel {
                             div()
                                 .id("symlink_icon")
                                 .pr_3()
-                                .tooltip(move |cx| {
-                                    Tooltip::with_meta(path.to_string(), None, "Symbolic Link", cx)
+                                .tooltip(move |window, cx| {
+                                    Tooltip::with_meta(
+                                        path.to_string(),
+                                        None,
+                                        "Symbolic Link",
+                                        window,
+                                        cx,
+                                    )
                                 })
                                 .child(
                                     Icon::new(IconName::ArrowUpRight)
@@ -3540,10 +3549,10 @@ impl ProjectPanel {
                     cx.notify();
                     cx.stop_propagation()
                 }))
-                .on_hover(|_, cx| {
+                .on_hover(|_, _window, cx| {
                     cx.stop_propagation();
                 })
-                .on_any_mouse_down(|_, cx| {
+                .on_any_mouse_down(|_, _window, cx| {
                     cx.stop_propagation();
                 })
                 .on_mouse_up(
@@ -3602,10 +3611,10 @@ impl ProjectPanel {
                     cx.notify();
                     cx.stop_propagation()
                 }))
-                .on_hover(|_, cx| {
+                .on_hover(|_, _window, cx| {
                     cx.stop_propagation();
                 })
-                .on_any_mouse_down(|_, cx| {
+                .on_any_mouse_down(|_, _window, cx| {
                     cx.stop_propagation();
                 })
                 .on_mouse_up(
@@ -4030,7 +4039,7 @@ impl Render for ProjectPanel {
                             ))
                             .with_render_fn(
                                 cx.view().clone(),
-                                move |this, params, cx| {
+                                move |this, params, _window, cx| {
                                     const LEFT_OFFSET: f32 = 14.;
                                     const PADDING_Y: f32 = 4.;
                                     const HITBOX_OVERDRAW: f32 = 3.;
@@ -4122,7 +4131,7 @@ impl Render for ProjectPanel {
                         })),
                 )
                 .when(is_local, |div| {
-                    div.drag_over::<ExternalPaths>(|style, _, cx| {
+                    div.drag_over::<ExternalPaths>(|style, _, _window, cx| {
                         style.bg(cx.theme().colors().drop_target_background)
                     })
                     .on_drop(cx.listener(
@@ -4190,7 +4199,7 @@ impl EventEmitter<Event> for ProjectPanel {}
 impl EventEmitter<PanelEvent> for ProjectPanel {}
 
 impl Panel for ProjectPanel {
-    fn position(&self, cx: &WindowContext) -> DockPosition {
+    fn position(&self, _window: &Window, cx: &AppContext) -> DockPosition {
         match ProjectPanelSettings::get_global(cx).dock {
             ProjectPanelDockPosition::Left => DockPosition::Left,
             ProjectPanelDockPosition::Right => DockPosition::Right,
@@ -4215,7 +4224,7 @@ impl Panel for ProjectPanel {
         );
     }
 
-    fn size(&self, cx: &WindowContext) -> Pixels {
+    fn size(&self, _window: &Window, cx: &AppContext) -> Pixels {
         self.width
             .unwrap_or_else(|| ProjectPanelSettings::get_global(cx).default_width)
     }
@@ -4226,13 +4235,13 @@ impl Panel for ProjectPanel {
         cx.notify();
     }
 
-    fn icon(&self, cx: &WindowContext) -> Option<IconName> {
+    fn icon(&self, _window: &Window, cx: &AppContext) -> Option<IconName> {
         ProjectPanelSettings::get_global(cx)
             .button
             .then_some(IconName::FileTree)
     }
 
-    fn icon_tooltip(&self, _cx: &WindowContext) -> Option<&'static str> {
+    fn icon_tooltip(&self, _window: &Window, _cx: &AppContext) -> Option<&'static str> {
         Some("Project Panel")
     }
 
@@ -4244,7 +4253,7 @@ impl Panel for ProjectPanel {
         "Project Panel"
     }
 
-    fn starts_open(&self, cx: &WindowContext) -> bool {
+    fn starts_open(&self, _window: &Window, cx: &AppContext) -> bool {
         let project = &self.project.read(cx);
         project.visible_worktrees(cx).any(|tree| {
             tree.read(cx)
@@ -4586,7 +4595,7 @@ mod tests {
         let project = Project::test(fs.clone(), ["/root1".as_ref(), "/root2".as_ref()], cx).await;
         let workspace = cx.add_window(|cx| Workspace::test_new(project.clone(), cx));
         let cx = &mut VisualTestContext::from_window(*workspace, cx);
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             let settings = *ProjectPanelSettings::get_global(cx);
             ProjectPanelSettings::override_global(
                 ProjectPanelSettings {
@@ -6328,7 +6337,7 @@ mod tests {
         let workspace = cx.add_window(|cx| Workspace::test_new(project.clone(), cx));
         let cx = &mut VisualTestContext::from_window(*workspace, cx);
         let panel = workspace.update(cx, ProjectPanel::new).unwrap();
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             panel.update(cx, |this, cx| {
                 this.select_next(&Default::default(), cx);
                 this.expand_selected_entry(&Default::default(), cx);
@@ -6353,7 +6362,7 @@ mod tests {
             ..Default::default()
         };
         cx.simulate_modifiers_change(modifiers_with_shift);
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             panel.update(cx, |this, cx| {
                 this.select_next(&Default::default(), cx);
             })
@@ -6368,7 +6377,7 @@ mod tests {
                 "      file_1.py  <== selected  <== marked",
             ]
         );
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             panel.update(cx, |this, cx| {
                 this.select_prev(&Default::default(), cx);
             })
@@ -6383,7 +6392,7 @@ mod tests {
                 "      file_1.py  <== marked",
             ]
         );
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             panel.update(cx, |this, cx| {
                 let drag = DraggedSelection {
                     active_selection: this.selection.unwrap(),
@@ -6409,7 +6418,7 @@ mod tests {
             ]
         );
         // ESC clears out all marks
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             panel.update(cx, |this, cx| {
                 this.cancel(&menu::Cancel, cx);
             })
@@ -6425,7 +6434,7 @@ mod tests {
             ]
         );
         // ESC clears out all marks
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             panel.update(cx, |this, cx| {
                 this.select_prev(&SelectPrev, cx);
                 this.select_next(&SelectNext, cx);
@@ -6442,7 +6451,7 @@ mod tests {
             ]
         );
         cx.simulate_modifiers_change(Default::default());
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             panel.update(cx, |this, cx| {
                 this.cut(&Cut, cx);
                 this.select_prev(&SelectPrev, cx);
@@ -6464,7 +6473,7 @@ mod tests {
             ]
         );
         cx.simulate_modifiers_change(modifiers_with_shift);
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             panel.update(cx, |this, cx| {
                 this.expand_selected_entry(&Default::default(), cx);
                 this.select_next(&SelectNext, cx);
@@ -6606,8 +6615,8 @@ mod tests {
             );
         }
 
-        cx.update(|cx| {
-            cx.update_global::<SettingsStore, _>(|store, cx| {
+        cx.update(|_window, cx| {
+            cx.update_global::<SettingsStore, _>(|store, _window, cx| {
                 store.update_user_settings::<ProjectPanelSettings>(cx, |project_panel_settings| {
                     project_panel_settings.auto_reveal_entries = Some(true)
                 });

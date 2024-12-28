@@ -47,7 +47,7 @@ impl ParentElement for Example {
 }
 
 impl RenderOnce for Example {
-    fn render(self, _cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut AppContext) -> impl IntoElement {
         WithRemSize::new(self.rem_size).child(
             v_flex()
                 .gap_2()

@@ -55,8 +55,10 @@ pub fn init(cx: &mut AppContext) {
                 cx.spawn(|_, mut cx| async move {
                     let specs = specs.await.to_string();
 
-                    cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_string(specs.clone())))
-                        .log_err();
+                    cx.update(|_window, cx| {
+                        cx.write_to_clipboard(ClipboardItem::new_string(specs.clone()))
+                    })
+                    .log_err();
 
                     cx.prompt(
                         PromptLevel::Info,
@@ -73,7 +75,7 @@ pub fn init(cx: &mut AppContext) {
                 let specs = SystemSpecs::new(cx);
                 cx.spawn(|_, mut cx| async move {
                     let specs = specs.await;
-                    cx.update(|cx| {
+                    cx.update(|_window, cx| {
                         cx.open_url(&request_feature_url(&specs));
                     })
                     .log_err();
@@ -84,7 +86,7 @@ pub fn init(cx: &mut AppContext) {
                 let specs = SystemSpecs::new(cx);
                 cx.spawn(|_, mut cx| async move {
                     let specs = specs.await;
-                    cx.update(|cx| {
+                    cx.update(|_window, cx| {
                         cx.open_url(&file_bug_report_url(&specs));
                     })
                     .log_err();

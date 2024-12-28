@@ -19,7 +19,7 @@ use gpui::{
     EventEmitter, ExternalPaths, FocusHandle, FocusOutEvent, FocusableView, KeyContext, Model,
     MouseButton, MouseDownEvent, NavigationDirection, Pixels, Point, PromptLevel, Render,
     ScrollHandle, Subscription, Task, View, ViewContext, VisualContext, WeakFocusHandle, WeakModel,
-    WeakView, WindowContext,
+    WeakView, Window,
 };
 use itertools::Itertools;
 use language::DiagnosticSeverity;
@@ -288,7 +288,7 @@ pub struct Pane {
     pub(crate) workspace: WeakView<Workspace>,
     project: WeakModel<Project>,
     drag_split_direction: Option<SplitDirection>,
-    can_drop_predicate: Option<Arc<dyn Fn(&dyn Any, &mut WindowContext) -> bool>>,
+    can_drop_predicate: Option<Arc<dyn Fn(&dyn Any, &mut Window, &mut AppContext) -> bool>>,
     custom_drop_handle:
         Option<Arc<dyn Fn(&mut Pane, &dyn Any, &mut ViewContext<Pane>) -> ControlFlow<(), ()>>>,
     can_split_predicate: Option<Arc<dyn Fn(&mut Self, &dyn Any, &mut ViewContext<Self>) -> bool>>,
@@ -372,7 +372,9 @@ impl Pane {
         workspace: WeakView<Workspace>,
         project: Model<Project>,
         next_timestamp: Arc<AtomicUsize>,
-        can_drop_predicate: Option<Arc<dyn Fn(&dyn Any, &mut WindowContext) -> bool + 'static>>,
+        can_drop_predicate: Option<
+            Arc<dyn Fn(&dyn Any, &mut Window, &mut AppContext) -> bool + 'static>,
+        >,
         double_click_dispatch_action: Box<dyn Action>,
         cx: &mut ViewContext<Self>,
     ) -> Self {
@@ -430,12 +432,12 @@ impl Pane {
                             .trigger(
                                 IconButton::new("plus", IconName::Plus)
                                     .icon_size(IconSize::Small)
-                                    .tooltip(|cx| Tooltip::text("New...", cx)),
+                                    .tooltip(|window, cx| Tooltip::text("New...", window, cx)),
                             )
                             .anchor(Corner::TopRight)
                             .with_handle(pane.new_item_context_menu_handle.clone())
-                            .menu(move |cx| {
-                                Some(ContextMenu::build(cx, |menu, _| {
+                            .menu(move |window, cx| {
+                                Some(ContextMenu::build(window, cx, |menu, _| {
                                     menu.action("New File", NewFile.boxed_clone())
                                         .action(
                                             "Open File",
@@ -463,12 +465,12 @@ impl Pane {
                             .trigger(
                                 IconButton::new("split", IconName::Split)
                                     .icon_size(IconSize::Small)
-                                    .tooltip(|cx| Tooltip::text("Split Pane", cx)),
+                                    .tooltip(|window, cx| Tooltip::text("Split Pane", window, cx)),
                             )
                             .anchor(Corner::TopRight)
                             .with_handle(pane.split_item_context_menu_handle.clone())
-                            .menu(move |cx| {
-                                ContextMenu::build(cx, |menu, _| {
+                            .menu(move |window, cx| {
+                                ContextMenu::build(window, cx, |menu, _| {
                                     menu.action("Split Right", SplitRight.boxed_clone())
                                         .action("Split Left", SplitLeft.boxed_clone())
                                         .action("Split Up", SplitUp.boxed_clone())
@@ -486,10 +488,11 @@ impl Pane {
                             .on_click(cx.listener(|pane, _, cx| {
                                 pane.toggle_zoom(&crate::ToggleZoom, cx);
                             }))
-                            .tooltip(move |cx| {
+                            .tooltip(move |window, cx| {
                                 Tooltip::for_action(
                                     if zoomed { "Zoom Out" } else { "Zoom In" },
                                     &ToggleZoom,
+                                    window,
                                     cx,
                                 )
                             })
@@ -543,17 +546,17 @@ impl Pane {
         }
     }
 
-    pub fn has_focus(&self, cx: &WindowContext) -> bool {
+    pub fn has_focus(&self, window: &Window, cx: &AppContext) -> bool {
         // We not only check whether our focus handle contains focus, but also
         // whether the active item might have focus, because we might have just activated an item
         // that hasn't rendered yet.
         // Before the next render, we might transfer focus
         // to the item, and `focus_handle.contains_focus` returns false because the `active_item`
         // is not hooked up to us in the dispatch tree.
-        self.focus_handle.contains_focused(cx)
-            || self
-                .active_item()
-                .map_or(false, |item| item.focus_handle(cx).contains_focused(cx))
+        self.focus_handle.contains_focused(window, cx)
+            || self.active_item().map_or(false, |item| {
+                item.focus_handle(window, cx).contains_focused(window, cx)
+            })
     }
 
     fn focus_in(&mut self, cx: &mut ViewContext<Self>) {
@@ -741,7 +744,7 @@ impl Pane {
     fn navigate_backward(&mut self, cx: &mut ViewContext<Self>) {
         if let Some(workspace) = self.workspace.upgrade() {
             let pane = cx.view().downgrade();
-            cx.window_context().defer(move |cx| {
+            cx.window_context().defer(move |_window, cx| {
                 workspace.update(cx, |workspace, cx| {
                     workspace.go_back(pane, cx).detach_and_log_err(cx)
                 })
@@ -752,7 +755,7 @@ impl Pane {
     fn navigate_forward(&mut self, cx: &mut ViewContext<Self>) {
         if let Some(workspace) = self.workspace.upgrade() {
             let pane = cx.view().downgrade();
-            cx.window_context().defer(move |cx| {
+            cx.window_context().defer(move |_window, cx| {
                 workspace.update(cx, |workspace, cx| {
                     workspace.go_forward(pane, cx).detach_and_log_err(cx)
                 })
@@ -1479,7 +1482,7 @@ impl Pane {
                     .any(|id| saved_project_items_ids.insert(*id))
                     // Always propose to save singleton files without any project paths: those cannot be saved via multibuffer, as require a file path selection modal.
                     || cx
-                        .update(|cx| {
+                        .update(|_window, cx| {
                             item_to_close.can_save(cx) && item_to_close.is_dirty(cx)
                                 && item_to_close.is_singleton(cx)
                                 && item_to_close.project_path(cx).is_none()
@@ -1670,7 +1673,7 @@ impl Pane {
         }
 
         let (mut has_conflict, mut is_dirty, mut can_save, is_singleton, has_deleted_file) = cx
-            .update(|cx| {
+            .update(|_window, cx| {
                 (
                     item.has_conflict(cx),
                     item.is_dirty(cx),
@@ -1744,7 +1747,7 @@ impl Pane {
             }
         } else if is_dirty && (can_save || can_save_as) {
             if save_intent == SaveIntent::Close {
-                let will_autosave = cx.update(|cx| {
+                let will_autosave = cx.update(|_window, cx| {
                     matches!(
                         item.workspace_settings(cx).autosave,
                         AutosaveSetting::OnFocusChange | AutosaveSetting::OnWindowChange
@@ -1841,14 +1844,15 @@ impl Pane {
     pub fn autosave_item(
         item: &dyn ItemHandle,
         project: Model<Project>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<Result<()>> {
         let format = !matches!(
             item.workspace_settings(cx).autosave,
             AutosaveSetting::AfterDelay { .. }
         );
         if Self::can_autosave_item(item, cx) {
-            item.save(format, project, cx)
+            item.save(format, project, window, cx)
         } else {
             Task::ready(Ok(()))
         }
@@ -1906,7 +1910,7 @@ impl Pane {
         let workspace = self.workspace.clone();
         let pane = cx.view().clone();
 
-        cx.window_context().defer(move |cx| {
+        cx.window_context().defer(move |_window, cx| {
             let Ok(status_bar) = workspace.update(cx, |workspace, _| workspace.status_bar.clone())
             else {
                 return;
@@ -1918,7 +1922,12 @@ impl Pane {
         });
     }
 
-    fn entry_abs_path(&self, entry: ProjectEntryId, cx: &WindowContext) -> Option<PathBuf> {
+    fn entry_abs_path(
+        &self,
+        entry: ProjectEntryId,
+        _window: &Window,
+        cx: &AppContext,
+    ) -> Option<PathBuf> {
         let worktree = self
             .workspace
             .upgrade()?
@@ -2119,16 +2128,16 @@ impl Pane {
                     is_active,
                     ix,
                 },
-                |tab, _, cx| cx.new_view(|_| tab.clone()),
+                |tab, _, window, cx| window.new_view(cx, |_| tab.clone()),
             )
-            .drag_over::<DraggedTab>(|tab, _, cx| {
+            .drag_over::<DraggedTab>(|tab, _, _window, cx| {
                 tab.bg(cx.theme().colors().drop_target_background)
             })
-            .drag_over::<DraggedSelection>(|tab, _, cx| {
+            .drag_over::<DraggedSelection>(|tab, _, _window, cx| {
                 tab.bg(cx.theme().colors().drop_target_background)
             })
             .when_some(self.can_drop_predicate.clone(), |this, p| {
-                this.can_drop(move |a, cx| p(a, cx))
+                this.can_drop(move |a, window, cx| p(a, window, cx))
             })
             .on_drop(cx.listener(move |this, dragged_tab: &DraggedTab, cx| {
                 this.drag_split_direction = None;
@@ -2143,7 +2152,7 @@ impl Pane {
                 this.handle_external_paths_drop(paths, cx)
             }))
             .when_some(item.tab_tooltip_text(cx), |tab, text| {
-                tab.tooltip(move |cx| Tooltip::text(text.clone(), cx))
+                tab.tooltip(move |window, cx| Tooltip::text(text.clone(), window, cx))
             })
             .start_slot::<Indicator>(indicator)
             .map(|this| {
@@ -2179,16 +2188,19 @@ impl Pane {
                 .map(|this| {
                     if is_active {
                         let focus_handle = focus_handle.clone();
-                        this.tooltip(move |cx| {
+                        this.tooltip(move |window, cx| {
                             Tooltip::for_action_in(
                                 end_slot_tooltip_text,
                                 end_slot_action,
                                 &focus_handle,
+                                window,
                                 cx,
                             )
                         })
                     } else {
-                        this.tooltip(move |cx| Tooltip::text(end_slot_tooltip_text, cx))
+                        this.tooltip(move |window, cx| {
+                            Tooltip::text(end_slot_tooltip_text, window, cx)
+                        })
                     }
                 });
                 this.end_slot(end_slot)
@@ -2222,10 +2234,10 @@ impl Pane {
         let is_pinned = self.is_tab_pinned(ix);
         let pane = cx.view().downgrade();
         let menu_context = item.focus_handle(cx);
-        right_click_menu(ix).trigger(tab).menu(move |cx| {
+        right_click_menu(ix).trigger(tab).menu(move |window, cx| {
             let pane = pane.clone();
             let menu_context = menu_context.clone();
-            ContextMenu::build(cx, move |mut menu, cx| {
+            ContextMenu::build(window, cx, move |mut menu, cx| {
                 if let Some(pane) = pane.upgrade() {
                     menu = menu
                         .entry(
@@ -2422,24 +2434,28 @@ impl Pane {
             .icon_size(IconSize::Small)
             .on_click({
                 let view = cx.view().clone();
-                move |_, cx| view.update(cx, Self::navigate_backward)
+                move |_, _window, cx| view.update(cx, Self::navigate_backward)
             })
             .disabled(!self.can_navigate_backward())
             .tooltip({
                 let focus_handle = focus_handle.clone();
-                move |cx| Tooltip::for_action_in("Go Back", &GoBack, &focus_handle, cx)
+                move |window, cx| {
+                    Tooltip::for_action_in("Go Back", &GoBack, &focus_handle, window, cx)
+                }
             });
 
         let navigate_forward = IconButton::new("navigate_forward", IconName::ArrowRight)
             .icon_size(IconSize::Small)
             .on_click({
                 let view = cx.view().clone();
-                move |_, cx| view.update(cx, Self::navigate_forward)
+                move |_, _window, cx| view.update(cx, Self::navigate_forward)
             })
             .disabled(!self.can_navigate_forward())
             .tooltip({
                 let focus_handle = focus_handle.clone();
-                move |cx| Tooltip::for_action_in("Go Forward", &GoForward, &focus_handle, cx)
+                move |window, cx| {
+                    Tooltip::for_action_in("Go Forward", &GoForward, &focus_handle, window, cx)
+                }
             });
 
         let mut tab_items = self
@@ -2491,10 +2507,10 @@ impl Pane {
                             .child("")
                             .h_full()
                             .flex_grow()
-                            .drag_over::<DraggedTab>(|bar, _, cx| {
+                            .drag_over::<DraggedTab>(|bar, _, _window, cx| {
                                 bar.bg(cx.theme().colors().drop_target_background)
                             })
-                            .drag_over::<DraggedSelection>(|bar, _, cx| {
+                            .drag_over::<DraggedSelection>(|bar, _, _window, cx| {
                                 bar.bg(cx.theme().colors().drop_target_background)
                             })
                             .on_drop(cx.listener(move |this, dragged_tab: &DraggedTab, cx| {
@@ -3029,7 +3045,7 @@ impl Render for Pane {
                                 div.group_drag_over::<ExternalPaths>("", |style| style.visible())
                             })
                             .when_some(self.can_drop_predicate.clone(), |this, p| {
-                                this.can_drop(move |a, cx| p(a, cx))
+                                this.can_drop(move |a, window, cx| p(a, window, cx))
                             })
                             .on_drop(cx.listener(move |this, dragged_tab, cx| {
                                 this.handle_tab_drop(dragged_tab, this.active_item_index(), cx)
@@ -3065,7 +3081,7 @@ impl Render for Pane {
                 cx.listener(|pane, _, cx| {
                     if let Some(workspace) = pane.workspace.upgrade() {
                         let pane = cx.view().downgrade();
-                        cx.window_context().defer(move |cx| {
+                        cx.window_context().defer(move |_window, cx| {
                             workspace.update(cx, |workspace, cx| {
                                 workspace.go_back(pane, cx).detach_and_log_err(cx)
                             })
@@ -3078,7 +3094,7 @@ impl Render for Pane {
                 cx.listener(|pane, _, cx| {
                     if let Some(workspace) = pane.workspace.upgrade() {
                         let pane = cx.view().downgrade();
-                        cx.window_context().defer(move |cx| {
+                        cx.window_context().defer(move |_window, cx| {
                             workspace.update(cx, |workspace, cx| {
                                 workspace.go_forward(pane, cx).detach_and_log_err(cx)
                             })
@@ -3090,17 +3106,30 @@ impl Render for Pane {
 }
 
 impl ItemNavHistory {
-    pub fn push<D: 'static + Send + Any>(&mut self, data: Option<D>, cx: &mut WindowContext) {
+    pub fn push<D: 'static + Send + Any>(
+        &mut self,
+        data: Option<D>,
+        window: &mut Window,
+        cx: &mut AppContext,
+    ) {
         self.history
-            .push(data, self.item.clone(), self.is_preview, cx);
+            .push(data, self.item.clone(), self.is_preview, window, cx);
     }
 
-    pub fn pop_backward(&mut self, cx: &mut WindowContext) -> Option<NavigationEntry> {
-        self.history.pop(NavigationMode::GoingBack, cx)
+    pub fn pop_backward(
+        &mut self,
+        window: &mut Window,
+        cx: &mut AppContext,
+    ) -> Option<NavigationEntry> {
+        self.history.pop(NavigationMode::GoingBack, window, cx)
     }
 
-    pub fn pop_forward(&mut self, cx: &mut WindowContext) -> Option<NavigationEntry> {
-        self.history.pop(NavigationMode::GoingForward, cx)
+    pub fn pop_forward(
+        &mut self,
+        window: &mut Window,
+        cx: &mut AppContext,
+    ) -> Option<NavigationEntry> {
+        self.history.pop(NavigationMode::GoingForward, window, cx)
     }
 }
 
@@ -3145,7 +3174,12 @@ impl NavHistory {
         self.0.lock().mode = NavigationMode::Normal;
     }
 
-    pub fn pop(&mut self, mode: NavigationMode, cx: &mut WindowContext) -> Option<NavigationEntry> {
+    pub fn pop(
+        &mut self,
+        mode: NavigationMode,
+        window: &mut Window,
+        cx: &mut AppContext,
+    ) -> Option<NavigationEntry> {
         let mut state = self.0.lock();
         let entry = match mode {
             NavigationMode::Normal | NavigationMode::Disabled | NavigationMode::ClosingItem => {
@@ -3157,7 +3191,7 @@ impl NavHistory {
         }
         .pop_back();
         if entry.is_some() {
-            state.did_update(cx);
+            state.did_update(window, cx);
         }
         entry
     }
@@ -3167,7 +3201,8 @@ impl NavHistory {
         data: Option<D>,
         item: Arc<dyn WeakItemHandle>,
         is_preview: bool,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) {
         let state = &mut *self.0.lock();
         match state.mode {
@@ -3218,7 +3253,7 @@ impl NavHistory {
                 });
             }
         }
-        state.did_update(cx);
+        state.did_update(window, cx);
     }
 
     pub fn remove_item(&mut self, item_id: EntityId) {
@@ -3241,9 +3276,9 @@ impl NavHistory {
 }
 
 impl NavHistoryState {
-    pub fn did_update(&self, cx: &mut WindowContext) {
+    pub fn did_update(&self, window: &mut Window, cx: &mut AppContext) {
         if let Some(pane) = self.pane.upgrade() {
-            cx.defer(move |cx| {
+            window.defer(cx, move |_window, cx| {
                 pane.update(cx, |pane, cx| pane.history_updated(cx));
             });
         }
@@ -3299,7 +3334,11 @@ pub fn tab_details(items: &[Box<dyn ItemHandle>], cx: &AppContext) -> Vec<usize>
     tab_details
 }
 
-pub fn render_item_indicator(item: Box<dyn ItemHandle>, cx: &WindowContext) -> Option<Indicator> {
+pub fn render_item_indicator(
+    item: Box<dyn ItemHandle>,
+    _window: &Window,
+    cx: &AppContext,
+) -> Option<Indicator> {
     maybe!({
         let indicator_color = match (item.has_conflict(cx), item.is_dirty(cx)) {
             (true, _) => Color::Warning,

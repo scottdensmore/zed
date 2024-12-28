@@ -14,7 +14,7 @@ use futures::future::join_all;
 use gpui::{
     actions, Action, AnyView, AppContext, AsyncWindowContext, Corner, Entity, EventEmitter,
     ExternalPaths, FocusHandle, FocusableView, IntoElement, Model, ParentElement, Pixels, Render,
-    Styled, Task, View, ViewContext, VisualContext, WeakView, WindowContext,
+    Styled, Task, View, ViewContext, VisualContext, WeakView, Window,
 };
 use itertools::Itertools;
 use project::{terminals::TerminalKind, Fs, Project, ProjectEntryId};
@@ -140,13 +140,13 @@ impl TerminalPanel {
                             .trigger(
                                 IconButton::new("plus", IconName::Plus)
                                     .icon_size(IconSize::Small)
-                                    .tooltip(|cx| Tooltip::text("New…", cx)),
+                                    .tooltip(|window, cx| Tooltip::text("New…", window, cx)),
                             )
                             .anchor(Corner::TopRight)
                             .with_handle(pane.new_item_context_menu_handle.clone())
-                            .menu(move |cx| {
+                            .menu(move |window, cx| {
                                 let focus_handle = focus_handle.clone();
-                                let menu = ContextMenu::build(cx, |menu, _| {
+                                let menu = ContextMenu::build(window, cx, |menu, _| {
                                     menu.context(focus_handle.clone())
                                         .action(
                                             "New Terminal",
@@ -170,14 +170,14 @@ impl TerminalPanel {
                             .trigger(
                                 IconButton::new("terminal-pane-split", IconName::Split)
                                     .icon_size(IconSize::Small)
-                                    .tooltip(|cx| Tooltip::text("Split Pane", cx)),
+                                    .tooltip(|window, cx| Tooltip::text("Split Pane", window, cx)),
                             )
                             .anchor(Corner::TopRight)
                             .with_handle(pane.split_item_context_menu_handle.clone())
                             .menu({
                                 let split_context = split_context.clone();
-                                move |cx| {
-                                    ContextMenu::build(cx, |menu, _| {
+                                move |window, cx| {
+                                    ContextMenu::build(window, cx, |menu, _| {
                                         menu.when_some(
                                             split_context.clone(),
                                             |menu, split_context| menu.context(split_context),
@@ -200,10 +200,11 @@ impl TerminalPanel {
                             .on_click(cx.listener(|pane, _, cx| {
                                 pane.toggle_zoom(&workspace::ToggleZoom, cx);
                             }))
-                            .tooltip(move |cx| {
+                            .tooltip(move |window, cx| {
                                 Tooltip::for_action(
                                     if zoomed { "Zoom Out" } else { "Zoom In" },
                                     &ToggleZoom,
+                                    window,
                                     cx,
                                 )
                             })
@@ -675,7 +676,8 @@ impl TerminalPanel {
         pane: &View<Pane>,
         item_index: usize,
         focus: bool,
-        cx: &mut WindowContext,
+        _window: &mut Window,
+        cx: &mut AppContext,
     ) {
         pane.update(cx, |pane, cx| {
             pane.activate_item(item_index, true, focus, cx)
@@ -922,7 +924,7 @@ impl TerminalPanel {
         })
     }
 
-    fn has_no_terminals(&self, cx: &WindowContext) -> bool {
+    fn has_no_terminals(&self, _window: &Window, cx: &AppContext) -> bool {
         self.active_pane.read(cx).items_len() == 0 && self.pending_terminals_to_add == 0
     }
 
@@ -930,14 +932,14 @@ impl TerminalPanel {
         self.assistant_enabled
     }
 
-    fn is_enabled(&self, cx: &WindowContext) -> bool {
+    fn is_enabled(&self, window: &Window, cx: &AppContext) -> bool {
         self.workspace.upgrade().map_or(false, |workspace| {
-            is_enabled_in_workspace(workspace.read(cx), cx)
+            is_enabled_in_workspace(workspace.read(cx), window, cx)
         })
     }
 }
 
-fn is_enabled_in_workspace(workspace: &Workspace, cx: &WindowContext) -> bool {
+fn is_enabled_in_workspace(workspace: &Workspace, _window: &Window, cx: &AppContext) -> bool {
     workspace.project().read(cx).supports_terminal(cx)
 }
 
@@ -1051,12 +1053,13 @@ pub fn new_terminal_pane(
                             // Source pane may be the one currently updated, so defer the move.
                             Ok(Some(new_pane)) => cx
                                 .spawn(|_, mut cx| async move {
-                                    cx.update(|cx| {
+                                    cx.update(|window, cx| {
                                         move_item(
                                             &source,
                                             &new_pane,
                                             item_id_to_move,
                                             new_pane.read(cx).active_item_index(),
+                                            window,
                                             cx,
                                         );
                                     })
@@ -1279,7 +1282,7 @@ impl FocusableView for TerminalPanel {
 }
 
 impl Panel for TerminalPanel {
-    fn position(&self, cx: &WindowContext) -> DockPosition {
+    fn position(&self, _window: &Window, cx: &AppContext) -> DockPosition {
         match TerminalSettings::get_global(cx).dock {
             TerminalDockPosition::Left => DockPosition::Left,
             TerminalDockPosition::Bottom => DockPosition::Bottom,
@@ -1306,9 +1309,9 @@ impl Panel for TerminalPanel {
         );
     }
 
-    fn size(&self, cx: &WindowContext) -> Pixels {
+    fn size(&self, window: &Window, cx: &AppContext) -> Pixels {
         let settings = TerminalSettings::get_global(cx);
-        match self.position(cx) {
+        match self.position(window, cx) {
             DockPosition::Left | DockPosition::Right => {
                 self.width.unwrap_or(settings.default_width)
             }
@@ -1325,7 +1328,7 @@ impl Panel for TerminalPanel {
         cx.notify();
     }
 
-    fn is_zoomed(&self, cx: &WindowContext) -> bool {
+    fn is_zoomed(&self, _window: &Window, cx: &AppContext) -> bool {
         self.active_pane.read(cx).is_zoomed()
     }
 
@@ -1354,7 +1357,7 @@ impl Panel for TerminalPanel {
         })
     }
 
-    fn icon_label(&self, cx: &WindowContext) -> Option<String> {
+    fn icon_label(&self, _window: &Window, cx: &AppContext) -> Option<String> {
         let count = self
             .center
             .panes()
@@ -1372,8 +1375,8 @@ impl Panel for TerminalPanel {
         "TerminalPanel"
     }
 
-    fn icon(&self, cx: &WindowContext) -> Option<IconName> {
-        if (self.is_enabled(cx) || !self.has_no_terminals(cx))
+    fn icon(&self, window: &Window, cx: &AppContext) -> Option<IconName> {
+        if (self.is_enabled(window, cx) || !self.has_no_terminals(window, cx))
             && TerminalSettings::get_global(cx).button
         {
             Some(IconName::Terminal)
@@ -1382,7 +1385,7 @@ impl Panel for TerminalPanel {
         }
     }
 
-    fn icon_tooltip(&self, _cx: &WindowContext) -> Option<&'static str> {
+    fn icon_tooltip(&self, _window: &Window, _cx: &AppContext) -> Option<&'static str> {
         Some("Terminal Panel")
     }
 
@@ -1407,8 +1410,14 @@ impl Render for InlineAssistTabBarButton {
             .on_click(cx.listener(|_, _, cx| {
                 cx.dispatch_action(InlineAssist::default().boxed_clone());
             }))
-            .tooltip(move |cx| {
-                Tooltip::for_action_in("Inline Assist", &InlineAssist::default(), &focus_handle, cx)
+            .tooltip(move |window, cx| {
+                Tooltip::for_action_in(
+                    "Inline Assist",
+                    &InlineAssist::default(),
+                    &focus_handle,
+                    window,
+                    cx,
+                )
             })
     }
 }

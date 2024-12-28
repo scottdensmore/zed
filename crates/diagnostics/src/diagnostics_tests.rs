@@ -1047,54 +1047,58 @@ fn editor_blocks(
     cx: &mut VisualTestContext,
 ) -> Vec<(DisplayRow, SharedString)> {
     let mut blocks = Vec::new();
-    cx.draw(gpui::Point::default(), AvailableSpace::min_size(), |cx| {
-        editor.update(cx, |editor, cx| {
-            let snapshot = editor.snapshot(cx);
-            blocks.extend(
-                snapshot
-                    .blocks_in_range(DisplayRow(0)..snapshot.max_point().row())
-                    .filter_map(|(row, block)| {
-                        let block_id = block.id();
-                        let name: SharedString = match block {
-                            Block::Custom(block) => {
-                                let mut element = block.render(&mut BlockContext {
-                                    context: cx,
-                                    anchor_x: px(0.),
-                                    gutter_dimensions: &GutterDimensions::default(),
-                                    line_height: px(0.),
-                                    em_width: px(0.),
-                                    max_width: px(0.),
-                                    block_id,
-                                    selected: false,
-                                    editor_style: &editor::EditorStyle::default(),
-                                });
-                                let element = element.downcast_mut::<Stateful<Div>>().unwrap();
-                                element
-                                    .interactivity()
-                                    .element_id
-                                    .clone()?
-                                    .try_into()
-                                    .ok()?
-                            }
-
-                            Block::FoldedBuffer { .. } => FILE_HEADER.into(),
-                            Block::ExcerptBoundary {
-                                starts_new_buffer, ..
-                            } => {
-                                if *starts_new_buffer {
-                                    FILE_HEADER.into()
-                                } else {
-                                    EXCERPT_HEADER.into()
+    cx.draw(
+        gpui::Point::default(),
+        AvailableSpace::min_size(),
+        |_window, cx| {
+            editor.update(cx, |editor, cx| {
+                let snapshot = editor.snapshot(cx);
+                blocks.extend(
+                    snapshot
+                        .blocks_in_range(DisplayRow(0)..snapshot.max_point().row())
+                        .filter_map(|(row, block)| {
+                            let block_id = block.id();
+                            let name: SharedString = match block {
+                                Block::Custom(block) => {
+                                    let mut element = block.render(&mut BlockContext {
+                                        context: cx,
+                                        anchor_x: px(0.),
+                                        gutter_dimensions: &GutterDimensions::default(),
+                                        line_height: px(0.),
+                                        em_width: px(0.),
+                                        max_width: px(0.),
+                                        block_id,
+                                        selected: false,
+                                        editor_style: &editor::EditorStyle::default(),
+                                    });
+                                    let element = element.downcast_mut::<Stateful<Div>>().unwrap();
+                                    element
+                                        .interactivity()
+                                        .element_id
+                                        .clone()?
+                                        .try_into()
+                                        .ok()?
                                 }
-                            }
-                        };
 
-                        Some((row, name))
-                    }),
-            )
-        });
+                                Block::FoldedBuffer { .. } => FILE_HEADER.into(),
+                                Block::ExcerptBoundary {
+                                    starts_new_buffer, ..
+                                } => {
+                                    if *starts_new_buffer {
+                                        FILE_HEADER.into()
+                                    } else {
+                                        EXCERPT_HEADER.into()
+                                    }
+                                }
+                            };
 
-        div().into_any()
-    });
+                            Some((row, name))
+                        }),
+                )
+            });
+
+            div().into_any()
+        },
+    );
     blocks
 }

@@ -75,8 +75,9 @@ pub fn init(cx: &mut AppContext) {
 
             if let Some(channel_id) = channel_id {
                 let workspace = cx.view().clone();
-                cx.window_context().defer(move |cx| {
-                    ChannelView::open(channel_id, None, workspace, cx).detach_and_log_err(cx)
+                cx.window_context().defer(move |window, cx| {
+                    ChannelView::open(channel_id, None, workspace, window, cx)
+                        .detach_and_log_err(cx)
                 });
             }
         });
@@ -232,14 +233,18 @@ impl CollabPanel {
             .detach();
 
             let view = cx.view().downgrade();
-            let list_state =
-                ListState::new(0, gpui::ListAlignment::Top, px(1000.), move |ix, cx| {
+            let list_state = ListState::new(
+                0,
+                gpui::ListAlignment::Top,
+                px(1000.),
+                move |ix, _window, cx| {
                     if let Some(view) = view.upgrade() {
                         view.update(cx, |view, cx| view.render_list_entry(ix, cx))
                     } else {
                         div().into_any()
                     }
-                });
+                },
+            );
 
             let mut this = Self {
                 width: None,
@@ -819,8 +824,8 @@ impl CollabPanel {
             } else if is_current_user {
                 IconButton::new("leave-call", IconName::Exit)
                     .style(ButtonStyle::Subtle)
-                    .on_click(move |_, cx| Self::leave_call(cx))
-                    .tooltip(|cx| Tooltip::text("Leave Call", cx))
+                    .on_click(move |_, window, cx| Self::leave_call(window, cx))
+                    .tooltip(|window, cx| Tooltip::text("Leave Call", window, cx))
                     .into_any_element()
             } else if role == proto::ChannelRole::Guest {
                 Label::new("Guest").color(Color::Muted).into_any_element()
@@ -835,7 +840,7 @@ impl CollabPanel {
                 if role == proto::ChannelRole::Guest {
                     return el;
                 }
-                el.tooltip(move |cx| Tooltip::text(tooltip.clone(), cx))
+                el.tooltip(move |window, cx| Tooltip::text(tooltip.clone(), window, cx))
                     .on_click(cx.listener(move |this, _, cx| {
                         this.workspace
                             .update(cx, |workspace, cx| workspace.follow(peer_id, cx))
@@ -883,7 +888,7 @@ impl CollabPanel {
                     .child(IconButton::new(0, IconName::Folder)),
             )
             .child(Label::new(project_name.clone()))
-            .tooltip(move |cx| Tooltip::text(format!("Open {}", project_name), cx))
+            .tooltip(move |window, cx| Tooltip::text(format!("Open {}", project_name), window, cx))
     }
 
     fn render_participant_screen(
@@ -912,7 +917,7 @@ impl CollabPanel {
                         })
                         .ok();
                 }))
-                .tooltip(move |cx| Tooltip::text("Open shared screen", cx))
+                .tooltip(move |window, cx| Tooltip::text("Open shared screen", window, cx))
             })
     }
 
@@ -956,7 +961,7 @@ impl CollabPanel {
                     })),
             )
             .child(Label::new("notes"))
-            .tooltip(move |cx| Tooltip::text("Open Channel Notes", cx))
+            .tooltip(move |window, cx| Tooltip::text("Open Channel Notes", window, cx))
     }
 
     fn render_channel_chat(
@@ -988,7 +993,7 @@ impl CollabPanel {
                     })),
             )
             .child(Label::new("chat"))
-            .tooltip(move |cx| Tooltip::text("Open Chat", cx))
+            .tooltip(move |window, cx| Tooltip::text("Open Chat", window, cx))
     }
 
     fn has_subchannels(&self, ix: usize) -> bool {
@@ -1289,7 +1294,7 @@ impl CollabPanel {
                 };
                 context_menu = context_menu.entry(label, None, {
                     let this = this.clone();
-                    move |cx| {
+                    move |_window, cx| {
                         this.update(cx, |this, cx| {
                             this.call(user_id, cx);
                         });
@@ -1299,7 +1304,7 @@ impl CollabPanel {
 
             context_menu.entry("Remove Contact", None, {
                 let this = this.clone();
-                move |cx| {
+                move |_window, cx| {
                     this.update(cx, |this, cx| {
                         this.remove_contact(contact.user.id, &contact.user.github_login, cx);
                     });
@@ -1601,10 +1606,10 @@ impl CollabPanel {
         self.collapsed_channels.binary_search(&channel_id).is_ok()
     }
 
-    fn leave_call(cx: &mut WindowContext) {
+    fn leave_call(window: &mut Window, cx: &mut AppContext) {
         ActiveCall::global(cx)
             .update(cx, |call, cx| call.hang_up(cx))
-            .detach_and_prompt_err("Failed to hang up", cx, |_, _| None);
+            .detach_and_prompt_err("Failed to hang up", window, cx, |_, _| None);
     }
 
     fn toggle_contact_finder(&mut self, cx: &mut ViewContext<Self>) {
@@ -1952,7 +1957,7 @@ impl CollabPanel {
         let Some(workspace) = self.workspace.upgrade() else {
             return;
         };
-        cx.window_context().defer(move |cx| {
+        cx.window_context().defer(move |_window, cx| {
             workspace.update(cx, |workspace, cx| {
                 if let Some(panel) = workspace.focus_panel::<ChatPanel>(cx) {
                     panel.update(cx, |panel, cx| {
@@ -2184,23 +2189,23 @@ impl CollabPanel {
                     .icon_size(IconSize::Small)
                     .size(ButtonSize::None)
                     .visible_on_hover("section-header")
-                    .on_click(move |_, cx| {
+                    .on_click(move |_, _window, cx| {
                         let item = ClipboardItem::new_string(channel_link_copy.clone());
                         cx.write_to_clipboard(item)
                     })
-                    .tooltip(|cx| Tooltip::text("Copy channel link", cx))
+                    .tooltip(|window, cx| Tooltip::text("Copy channel link", window, cx))
                     .into_any_element()
             }),
             Section::Contacts => Some(
                 IconButton::new("add-contact", IconName::Plus)
                     .on_click(cx.listener(|this, _, cx| this.toggle_contact_finder(cx)))
-                    .tooltip(|cx| Tooltip::text("Search for new contact", cx))
+                    .tooltip(|window, cx| Tooltip::text("Search for new contact", window, cx))
                     .into_any_element(),
             ),
             Section::Channels => Some(
                 IconButton::new("add-channel", IconName::Plus)
                     .on_click(cx.listener(|this, _, cx| this.new_root_channel(cx)))
-                    .tooltip(|cx| Tooltip::text("Create a channel", cx))
+                    .tooltip(|window, cx| Tooltip::text("Create a channel", window, cx))
                     .into_any_element(),
             ),
             _ => None,
@@ -2292,7 +2297,7 @@ impl CollabPanel {
             .id(github_login.clone())
             .group("")
             .child(item)
-            .tooltip(move |cx| {
+            .tooltip(move |window, cx| {
                 let text = if !online {
                     format!(" {} is offline", &github_login)
                 } else if busy {
@@ -2305,7 +2310,7 @@ impl CollabPanel {
                         format!("Call {}", &github_login)
                     }
                 };
-                Tooltip::text(text, cx)
+                Tooltip::text(text, window, cx)
             })
     }
 
@@ -2332,13 +2337,13 @@ impl CollabPanel {
                         this.respond_to_contact_request(user_id, false, cx);
                     }))
                     .icon_color(color)
-                    .tooltip(|cx| Tooltip::text("Decline invite", cx)),
+                    .tooltip(|_window, cx| Tooltip::text("Decline invite", cx)),
                 IconButton::new("accept-contact", IconName::Check)
                     .on_click(cx.listener(move |this, _, cx| {
                         this.respond_to_contact_request(user_id, true, cx);
                     }))
                     .icon_color(color)
-                    .tooltip(|cx| Tooltip::text("Accept invite", cx)),
+                    .tooltip(|_window, cx| Tooltip::text("Accept invite", cx)),
             ]
         } else {
             let github_login = github_login.clone();
@@ -2347,7 +2352,7 @@ impl CollabPanel {
                     this.remove_contact(user_id, &github_login, cx);
                 }))
                 .icon_color(color)
-                .tooltip(|cx| Tooltip::text("Cancel invite", cx))]
+                .tooltip(|_window, cx| Tooltip::text("Cancel invite", cx))]
         };
 
         ListItem::new(github_login.clone())
@@ -2387,13 +2392,13 @@ impl CollabPanel {
                     this.respond_to_channel_invite(channel_id, false, cx);
                 }))
                 .icon_color(color)
-                .tooltip(|cx| Tooltip::text("Decline invite", cx)),
+                .tooltip(|window, cx| Tooltip::text("Decline invite", window, cx)),
             IconButton::new("accept-invite", IconName::Check)
                 .on_click(cx.listener(move |this, _, cx| {
                     this.respond_to_channel_invite(channel_id, true, cx);
                 }))
                 .icon_color(color)
-                .tooltip(|cx| Tooltip::text("Accept invite", cx)),
+                .tooltip(|window, cx| Tooltip::text("Accept invite", window, cx)),
         ];
 
         ListItem::new(("channel-invite", channel.id.0 as usize))
@@ -2492,15 +2497,15 @@ impl CollabPanel {
             .flex()
             .w_full()
             .when(!channel.is_root_channel(), |el| {
-                el.on_drag(channel.clone(), move |channel, _, cx| {
-                    cx.new_view(|_| DraggedChannelView {
+                el.on_drag(channel.clone(), move |channel, _, window, cx| {
+                    window.new_view(cx, |_| DraggedChannelView {
                         channel: channel.clone(),
                         width,
                     })
                 })
             })
             .drag_over::<Channel>({
-                move |style, dragged_channel: &Channel, cx| {
+                move |style, dragged_channel: &Channel, _window, cx| {
                     if dragged_channel.root_id() == root_id {
                         style.bg(cx.theme().colors().ghost_element_hover)
                     } else {
@@ -2585,7 +2590,9 @@ impl CollabPanel {
                                 .on_click(cx.listener(move |this, _, cx| {
                                     this.join_channel_chat(channel_id, cx)
                                 }))
-                                .tooltip(|cx| Tooltip::text("Open channel chat", cx))
+                                .tooltip(|window, cx| {
+                                    Tooltip::text("Open channel chat", window, cx)
+                                })
                                 .visible_on_hover(""),
                         )
                         .child(
@@ -2601,20 +2608,23 @@ impl CollabPanel {
                                 .on_click(cx.listener(move |this, _, cx| {
                                     this.open_channel_notes(channel_id, cx)
                                 }))
-                                .tooltip(|cx| Tooltip::text("Open channel notes", cx))
+                                .tooltip(|window, cx| {
+                                    Tooltip::text("Open channel notes", window, cx)
+                                })
                                 .visible_on_hover(""),
                         ),
                 ),
             )
             .tooltip({
                 let channel_store = self.channel_store.clone();
-                move |cx| {
-                    cx.new_view(|_| JoinChannelTooltip {
-                        channel_store: channel_store.clone(),
-                        channel_id,
-                        has_notes_notification,
-                    })
-                    .into()
+                move |window, cx| {
+                    window
+                        .new_view(cx, |_| JoinChannelTooltip {
+                            channel_store: channel_store.clone(),
+                            channel_id,
+                            has_notes_notification,
+                        })
+                        .into()
                 }
             })
     }
@@ -2643,39 +2653,53 @@ impl CollabPanel {
     }
 }
 
-fn render_tree_branch(is_last: bool, overdraw: bool, cx: &mut WindowContext) -> impl IntoElement {
-    let rem_size = cx.rem_size();
-    let line_height = cx.text_style().line_height_in_pixels(rem_size);
+fn render_tree_branch(
+    is_last: bool,
+    overdraw: bool,
+    window: &mut Window,
+    cx: &mut AppContext,
+) -> impl IntoElement {
+    let rem_size = window.rem_size(cx);
+    let line_height = window.text_style(cx).line_height_in_pixels(rem_size);
     let width = rem_size * 1.5;
     let thickness = px(1.);
     let color = cx.theme().colors().text;
 
     canvas(
         |_, _| {},
-        move |bounds, _, cx| {
+        move |bounds, _, window, cx| {
             let start_x = (bounds.left() + bounds.right() - thickness) / 2.;
             let start_y = (bounds.top() + bounds.bottom() - thickness) / 2.;
             let right = bounds.right();
             let top = bounds.top();
 
-            cx.paint_quad(fill(
-                Bounds::from_corners(
-                    point(start_x, top),
-                    point(
-                        start_x + thickness,
-                        if is_last {
-                            start_y
-                        } else {
-                            bounds.bottom() + if overdraw { px(1.) } else { px(0.) }
-                        },
+            window.paint_quad(
+                fill(
+                    Bounds::from_corners(
+                        point(start_x, top),
+                        point(
+                            start_x + thickness,
+                            if is_last {
+                                start_y
+                            } else {
+                                bounds.bottom() + if overdraw { px(1.) } else { px(0.) }
+                            },
+                        ),
                     ),
+                    color,
                 ),
-                color,
-            ));
-            cx.paint_quad(fill(
-                Bounds::from_corners(point(start_x, start_y), point(right, start_y + thickness)),
-                color,
-            ));
+                cx,
+            );
+            window.paint_quad(
+                fill(
+                    Bounds::from_corners(
+                        point(start_x, start_y),
+                        point(right, start_y + thickness),
+                    ),
+                    color,
+                ),
+                cx,
+            );
         },
     )
     .w(width)
@@ -2719,6 +2743,7 @@ impl Render for CollabPanel {
 impl EventEmitter<PanelEvent> for CollabPanel {}
 
 impl Panel for CollabPanel {
+    // REFACTOR ERROR Unexpected type &gpui::WindowContext
     fn position(&self, cx: &gpui::WindowContext) -> DockPosition {
         CollaborationPanelSettings::get_global(cx).dock
     }
@@ -2735,6 +2760,7 @@ impl Panel for CollabPanel {
         );
     }
 
+    // REFACTOR ERROR Unexpected type &gpui::WindowContext
     fn size(&self, cx: &gpui::WindowContext) -> Pixels {
         self.width
             .unwrap_or_else(|| CollaborationPanelSettings::get_global(cx).default_width)
@@ -2746,13 +2772,14 @@ impl Panel for CollabPanel {
         cx.notify();
     }
 
+    // REFACTOR ERROR Unexpected type &gpui::WindowContext
     fn icon(&self, cx: &gpui::WindowContext) -> Option<ui::IconName> {
         CollaborationPanelSettings::get_global(cx)
             .button
             .then_some(ui::IconName::UserGroup)
     }
 
-    fn icon_tooltip(&self, _cx: &WindowContext) -> Option<&'static str> {
+    fn icon_tooltip(&self, _window: &Window, _cx: &AppContext) -> Option<&'static str> {
         Some("Collab Panel")
     }
 

@@ -87,11 +87,11 @@ fn cell_content(row: &Value, field: &str) -> String {
 const TABLE_Y_PADDING_MULTIPLE: f32 = 0.5;
 
 impl TableView {
-    pub fn new(table: &TabularDataResource, cx: &mut WindowContext) -> Self {
+    pub fn new(table: &TabularDataResource, window: &mut Window, cx: &mut AppContext) -> Self {
         let mut widths = Vec::with_capacity(table.schema.fields.len());
 
-        let text_system = cx.text_system();
-        let text_style = cx.text_style();
+        let text_system = window.text_system(cx);
+        let text_style = window.text_style(cx);
         let text_font = ThemeSettings::get_global(cx).buffer_font.clone();
         let font_size = ThemeSettings::get_global(cx).buffer_font_size;
         let mut runs = [TextRun {
@@ -118,8 +118,8 @@ impl TableView {
             for row in data {
                 let content = cell_content(row, &field.name);
                 runs[0].len = content.len();
-                let cell_width = cx
-                    .text_system()
+                let cell_width = window
+                    .text_system(cx)
                     .layout_line(&content, font_size, &runs)
                     .map(|layout| layout.width)
                     .unwrap_or(px(0.));
@@ -199,11 +199,12 @@ impl TableView {
         schema: &TableSchema,
         is_header: bool,
         row: &Value,
-        cx: &WindowContext,
+        window: &Window,
+        cx: &AppContext,
     ) -> AnyElement {
         let theme = cx.theme();
 
-        let line_height = cx.line_height();
+        let line_height = window.line_height(cx);
 
         let row_cells = schema
             .fields
@@ -285,11 +286,11 @@ impl Render for TableView {
 }
 
 impl OutputContent for TableView {
-    fn clipboard_content(&self, _cx: &WindowContext) -> Option<ClipboardItem> {
+    fn clipboard_content(&self, _window: &Window, _cx: &AppContext) -> Option<ClipboardItem> {
         Some(self.cached_clipboard_content.clone())
     }
 
-    fn has_clipboard_content(&self, _cx: &WindowContext) -> bool {
+    fn has_clipboard_content(&self, _window: &Window, _cx: &AppContext) -> bool {
         true
     }
 }

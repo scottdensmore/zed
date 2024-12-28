@@ -153,7 +153,7 @@ impl Render for BlameEntryTooltip {
 
         tooltip_container(cx, move |this, cx| {
             this.occlude()
-                .on_mouse_move(|_, cx| cx.stop_propagation())
+                .on_mouse_move(|_, _window, cx| cx.stop_propagation())
                 .child(
                     v_flex()
                         .w(gpui::rems(30.))
@@ -208,7 +208,7 @@ impl Render for BlameEntryTooltip {
                                                 .icon_color(Color::Muted)
                                                 .icon_position(IconPosition::Start)
                                                 .style(ButtonStyle::Subtle)
-                                                .on_click(move |_, cx| {
+                                                .on_click(move |_, _window, cx| {
                                                     cx.stop_propagation();
                                                     cx.open_url(pr.url.as_str())
                                                 }),
@@ -235,7 +235,7 @@ impl Render for BlameEntryTooltip {
                                                     .as_ref()
                                                     .and_then(|details| details.permalink.clone()),
                                                 |this, url| {
-                                                    this.on_click(move |_, cx| {
+                                                    this.on_click(move |_, _window, cx| {
                                                         cx.stop_propagation();
                                                         cx.open_url(url.as_str())
                                                     })
@@ -247,7 +247,7 @@ impl Render for BlameEntryTooltip {
                                                 .shape(IconButtonShape::Square)
                                                 .icon_size(IconSize::Small)
                                                 .icon_color(Color::Muted)
-                                                .on_click(move |_, cx| {
+                                                .on_click(move |_, _window, cx| {
                                                     cx.stop_propagation();
                                                     cx.write_to_clipboard(
                                                         ClipboardItem::new_string(full_sha.clone()),

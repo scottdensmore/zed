@@ -5,7 +5,7 @@ use futures::{channel::mpsc, StreamExt};
 use gpui::{
     actions, div, AppContext, Context, Corner, EventEmitter, FocusHandle, FocusableView,
     IntoElement, Model, ModelContext, ParentElement, Render, Styled, Subscription, View,
-    ViewContext, VisualContext, WeakModel, WindowContext,
+    ViewContext, VisualContext, WeakModel, Window,
 };
 use language::LanguageServerId;
 use lsp::{
@@ -999,7 +999,7 @@ impl Item for LspLogView {
         Editor::to_item_events(event, f)
     }
 
-    fn tab_content_text(&self, _cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, _cx: &AppContext) -> Option<SharedString> {
         Some("LSP Logs".into())
     }
 
@@ -1165,9 +1165,9 @@ impl Render for LspLogToolbarItemView {
             ))
             .menu({
                 let log_view = log_view.clone();
-                move |cx| {
+                move |window, cx| {
                     let log_view = log_view.clone();
-                    ContextMenu::build(cx, |mut menu, cx| {
+                    ContextMenu::build(window, cx, |mut menu, cx| {
                         for (server_id, name, worktree_root, active_entry_kind) in
                             available_language_servers.iter()
                         {
@@ -1211,10 +1211,10 @@ impl Render for LspLogToolbarItemView {
                     "language_server_menu_header",
                     server.selected_entry.label(),
                 ))
-                .menu(move |cx| {
+                .menu(move |window, cx| {
                     let log_toolbar_view = log_toolbar_view.clone();
                     let log_view = log_view.clone();
-                    Some(ContextMenu::build(cx, move |this, cx| {
+                    Some(ContextMenu::build(window, cx, move |this, cx| {
                         this.entry(
                             SERVER_LOGS,
                             None,
@@ -1233,7 +1233,7 @@ impl Render for LspLogToolbarItemView {
                             .custom_entry(
                                 {
                                     let log_toolbar_view = log_toolbar_view.clone();
-                                    move |cx| {
+                                    move |window, cx| {
                                         h_flex()
                                             .w_full()
                                             .justify_between()
@@ -1248,8 +1248,9 @@ impl Render for LspLogToolbarItemView {
                                                             ToggleState::Unselected
                                                         },
                                                     )
-                                                    .on_click(cx.listener_for(
+                                                    .on_click(window.listener_for(
                                                         &log_toolbar_view,
+                                                        cx,
                                                         move |view, selection, cx| {
                                                             let enabled = matches!(
                                                                 selection,
@@ -1301,7 +1302,7 @@ impl Render for LspLogToolbarItemView {
                                     .menu({
                                         let log_view = log_view.clone();
 
-                                        move |cx| {
+                                        move |window, cx| {
                                             let id = log_view.read(cx).current_server_id?;
 
                                             let trace_level = log_view.update(cx, |this, cx| {
@@ -1313,7 +1314,7 @@ impl Render for LspLogToolbarItemView {
                                                 })
                                             })?;
 
-                                            ContextMenu::build(cx, |mut menu, _| {
+                                            ContextMenu::build(window, cx, |mut menu, _| {
                                                 let log_view = log_view.clone();
 
                                                 for (option, label) in [
@@ -1323,7 +1324,7 @@ impl Render for LspLogToolbarItemView {
                                                 ] {
                                                     menu = menu.entry(label, None, {
                                                         let log_view = log_view.clone();
-                                                        move |cx| {
+                                                        move |_window, cx| {
                                                             log_view.update(cx, |this, cx| {
                                                                 if let Some(id) =
                                                                     this.current_server_id
@@ -1359,7 +1360,7 @@ impl Render for LspLogToolbarItemView {
                                     .menu({
                                         let log_view = log_view.clone();
 
-                                        move |cx| {
+                                        move |window, cx| {
                                             let id = log_view.read(cx).current_server_id?;
 
                                             let log_level = log_view.update(cx, |this, cx| {
@@ -1371,7 +1372,7 @@ impl Render for LspLogToolbarItemView {
                                                 })
                                             })?;
 
-                                            ContextMenu::build(cx, |mut menu, _| {
+                                            ContextMenu::build(window, cx, |mut menu, _| {
                                                 let log_view = log_view.clone();
 
                                                 for (option, label) in [
@@ -1382,7 +1383,7 @@ impl Render for LspLogToolbarItemView {
                                                 ] {
                                                     menu = menu.entry(label, None, {
                                                         let log_view = log_view.clone();
-                                                        move |cx| {
+                                                        move |_window, cx| {
                                                             log_view.update(cx, |this, cx| {
                                                                 if let Some(id) =
                                                                     this.current_server_id

@@ -743,7 +743,7 @@ mod test {
     async fn test_add_surrounds_visual(cx: &mut gpui::TestAppContext) {
         let mut cx = VimTestContext::new(cx, true).await;
 
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             cx.bind_keys([KeyBinding::new(
                 "shift-s",
                 PushOperator(Operator::AddSurrounds { target: None }),

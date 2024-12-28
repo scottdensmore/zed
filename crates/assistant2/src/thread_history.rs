@@ -98,7 +98,7 @@ impl PastThread {
 }
 
 impl RenderOnce for PastThread {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut AppContext) -> impl IntoElement {
         let (id, summary) = {
             const DEFAULT_SUMMARY: SharedString = SharedString::new_static("New Thread");
             let thread = self.thread.read(cx);
@@ -139,11 +139,11 @@ impl RenderOnce for PastThread {
                         IconButton::new("delete", IconName::TrashAlt)
                             .shape(IconButtonShape::Square)
                             .icon_size(IconSize::Small)
-                            .tooltip(|cx| Tooltip::text("Delete Thread", cx))
+                            .tooltip(|window, cx| Tooltip::text("Delete Thread", window, cx))
                             .on_click({
                                 let assistant_panel = self.assistant_panel.clone();
                                 let id = id.clone();
-                                move |_event, cx| {
+                                move |_event, _window, cx| {
                                     assistant_panel
                                         .update(cx, |this, cx| {
                                             this.delete_thread(&id, cx);
@@ -156,7 +156,7 @@ impl RenderOnce for PastThread {
             .on_click({
                 let assistant_panel = self.assistant_panel.clone();
                 let id = id.clone();
-                move |_event, cx| {
+                move |_event, _window, cx| {
                     assistant_panel
                         .update(cx, |this, cx| {
                             this.open_thread(&id, cx);

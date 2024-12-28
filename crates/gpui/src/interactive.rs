@@ -506,8 +506,8 @@ mod test {
     #[gpui::test]
     fn test_on_events(cx: &mut TestAppContext) {
         let window = cx.update(|cx| {
-            cx.open_window(Default::default(), |cx| {
-                cx.new_view(|cx| TestView {
+            cx.open_window(Default::default(), |window, cx| {
+                window.new_view(cx, |cx| TestView {
                     saw_key_down: false,
                     saw_action: false,
                     focus_handle: cx.focus_handle(),

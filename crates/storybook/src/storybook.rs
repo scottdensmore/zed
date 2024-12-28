@@ -95,10 +95,10 @@ fn main() {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
-            move |cx| {
-                theme::setup_ui_font(cx);
+            move |window, cx| {
+                theme::setup_ui_font(window, cx);
 
-                cx.new_view(|cx| StoryWrapper::new(selector.story(cx)))
+                window.new_view(cx, |cx| StoryWrapper::new(selector.story(cx)))
             },
         );
 

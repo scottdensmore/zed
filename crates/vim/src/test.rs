@@ -798,7 +798,7 @@ async fn test_select_all_issue_2170(cx: &mut gpui::TestAppContext) {
 async fn test_jk(cx: &mut gpui::TestAppContext) {
     let mut cx = NeovimBackedTestContext::new(cx).await;
 
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         cx.bind_keys([KeyBinding::new(
             "j k",
             NormalBefore,
@@ -816,7 +816,7 @@ async fn test_jk(cx: &mut gpui::TestAppContext) {
 async fn test_jk_delay(cx: &mut gpui::TestAppContext) {
     let mut cx = VimTestContext::new(cx, true).await;
 
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         cx.bind_keys([KeyBinding::new(
             "j k",
             NormalBefore,
@@ -840,7 +840,7 @@ async fn test_jk_delay(cx: &mut gpui::TestAppContext) {
 async fn test_comma_w(cx: &mut gpui::TestAppContext) {
     let mut cx = NeovimBackedTestContext::new(cx).await;
 
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         cx.bind_keys([KeyBinding::new(
             ", w",
             motion::Down {
@@ -1330,7 +1330,7 @@ async fn test_command_alias(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 async fn test_remap_adjacent_dog_cat(cx: &mut gpui::TestAppContext) {
     let mut cx = NeovimBackedTestContext::new(cx).await;
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         cx.bind_keys([
             KeyBinding::new(
                 "d o g",
@@ -1363,7 +1363,7 @@ async fn test_remap_adjacent_dog_cat(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 async fn test_remap_nested_pineapple(cx: &mut gpui::TestAppContext) {
     let mut cx = NeovimBackedTestContext::new(cx).await;
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         cx.bind_keys([
             KeyBinding::new(
                 "p i n",
@@ -1406,7 +1406,7 @@ async fn test_remap_nested_pineapple(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 async fn test_remap_recursion(cx: &mut gpui::TestAppContext) {
     let mut cx = NeovimBackedTestContext::new(cx).await;
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         cx.bind_keys([KeyBinding::new(
             "x",
             workspace::SendKeystrokes("\" _ x".to_string()),
@@ -1440,7 +1440,7 @@ async fn test_escape_while_waiting(cx: &mut gpui::TestAppContext) {
 #[gpui::test]
 async fn test_ctrl_w_override(cx: &mut gpui::TestAppContext) {
     let mut cx = NeovimBackedTestContext::new(cx).await;
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         cx.bind_keys([KeyBinding::new("ctrl-w", DeleteLine, None)]);
     });
     cx.neovim.exec("map <c-w> D").await;

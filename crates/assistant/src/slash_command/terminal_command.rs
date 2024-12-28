@@ -54,7 +54,8 @@ impl SlashCommand for TerminalSlashCommand {
         _arguments: &[String],
         _cancel: Arc<AtomicBool>,
         _workspace: Option<WeakView<Workspace>>,
-        _cx: &mut WindowContext,
+        _window: &mut Window,
+        _cx: &mut AppContext,
     ) -> Task<Result<Vec<ArgumentCompletion>>> {
         Task::ready(Ok(Vec::new()))
     }
@@ -66,13 +67,14 @@ impl SlashCommand for TerminalSlashCommand {
         _context_buffer: BufferSnapshot,
         workspace: WeakView<Workspace>,
         _delegate: Option<Arc<dyn LspAdapterDelegate>>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<SlashCommandResult> {
         let Some(workspace) = workspace.upgrade() else {
             return Task::ready(Err(anyhow::anyhow!("workspace was dropped")));
         };
 
-        let Some(active_terminal) = resolve_active_terminal(&workspace, cx) else {
+        let Some(active_terminal) = resolve_active_terminal(&workspace, window, cx) else {
             return Task::ready(Err(anyhow::anyhow!("no active terminal")));
         };
 
@@ -108,7 +110,8 @@ impl SlashCommand for TerminalSlashCommand {
 
 fn resolve_active_terminal(
     workspace: &View<Workspace>,
-    cx: &WindowContext,
+    window: &Window,
+    cx: &AppContext,
 ) -> Option<View<TerminalView>> {
     if let Some(terminal_view) = workspace
         .read(cx)
@@ -118,7 +121,7 @@ fn resolve_active_terminal(
         return Some(terminal_view);
     }
 
-    let terminal_panel = workspace.read(cx).panel::<TerminalPanel>(cx)?;
+    let terminal_panel = workspace.read(cx).panel::<TerminalPanel>(window, cx)?;
     terminal_panel.read(cx).pane().and_then(|pane| {
         pane.read(cx)
             .active_item()

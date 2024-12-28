@@ -161,15 +161,15 @@ async fn test_channel_notes_participant_indices(
 
     // Clients A, B, and C open the channel notes
     let channel_view_a = cx_a
-        .update(|cx| ChannelView::open(channel_id, None, workspace_a.clone(), cx))
+        .update(|window, cx| ChannelView::open(channel_id, None, workspace_a.clone(), window, cx))
         .await
         .unwrap();
     let channel_view_b = cx_b
-        .update(|cx| ChannelView::open(channel_id, None, workspace_b.clone(), cx))
+        .update(|window, cx| ChannelView::open(channel_id, None, workspace_b.clone(), window, cx))
         .await
         .unwrap();
     let channel_view_c = cx_c
-        .update(|cx| ChannelView::open(channel_id, None, workspace_c.clone(), cx))
+        .update(|window, cx| ChannelView::open(channel_id, None, workspace_c.clone(), window, cx))
         .await
         .unwrap();
 
@@ -641,7 +641,7 @@ async fn test_channel_buffer_changes(
     });
 
     // Closing the buffer should re-enable change tracking
-    cx_b.update(|cx| {
+    cx_b.update(|_window, cx| {
         workspace_b.update(cx, |workspace, cx| {
             workspace.close_all_items_and_panes(&Default::default(), cx)
         });

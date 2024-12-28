@@ -77,7 +77,7 @@ async fn test_basic_following(
     let (workspace_a, cx_a) = client_a.build_workspace(&project_a, cx_a);
     let (workspace_b, cx_b) = client_b.build_workspace(&project_b, cx_b);
 
-    cx_b.update(|cx| {
+    cx_b.update(|_window, cx| {
         assert!(cx.is_window_active());
     });
 
@@ -1544,7 +1544,7 @@ async fn test_following_across_workspaces(cx_a: &mut TestAppContext, cx_b: &mut 
 
     executor.run_until_parked();
     assert_eq!(visible_push_notifications(cx_a).len(), 1);
-    cx_a.update(|cx| {
+    cx_a.update(|_window, cx| {
         workspace::join_in_room_project(
             project_b_id,
             client_b.user_id().unwrap(),
@@ -1618,7 +1618,7 @@ async fn test_following_stops_on_unshare(cx_a: &mut TestAppContext, cx_b: &mut T
     });
 
     // a unshares the project
-    cx_a.update(|cx| {
+    cx_a.update(|_window, cx| {
         let project = workspace_a.read(cx).project().clone();
         ActiveCall::global(cx).update(cx, |call, cx| {
             call.unshare_project(project, cx).unwrap();
@@ -1636,7 +1636,7 @@ async fn test_following_stops_on_unshare(cx_a: &mut TestAppContext, cx_b: &mut T
     editor_b.update(cx_b, |editor, cx| {
         assert_eq!(editor.selections.ranges(cx), vec![1..1])
     });
-    cx_b.update(|cx| {
+    cx_b.update(|_window, cx| {
         let room = ActiveCall::global(cx).read(cx).room().unwrap().read(cx);
         let participant = room.remote_participants().get(&client_a.id()).unwrap();
         assert_eq!(participant.location, ParticipantLocation::UnsharedProject)
@@ -1924,7 +1924,7 @@ async fn test_following_to_channel_notes_without_a_shared_project(
 
     // Client A opens the notes for channel 1.
     let channel_notes_1_a = cx_a
-        .update(|cx| ChannelView::open(channel_1_id, None, workspace_a.clone(), cx))
+        .update(|window, cx| ChannelView::open(channel_1_id, None, workspace_a.clone(), window, cx))
         .await
         .unwrap();
     channel_notes_1_a.update(cx_a, |notes, cx| {
@@ -1971,7 +1971,7 @@ async fn test_following_to_channel_notes_without_a_shared_project(
 
     //  Client A opens the notes for channel 2.
     let channel_notes_2_a = cx_a
-        .update(|cx| ChannelView::open(channel_2_id, None, workspace_a.clone(), cx))
+        .update(|window, cx| ChannelView::open(channel_2_id, None, workspace_a.clone(), window, cx))
         .await
         .unwrap();
     channel_notes_2_a.update(cx_a, |notes, cx| {
@@ -2069,9 +2069,9 @@ async fn test_following_to_channel_notes_other_workspace(
 
     // a opens a second workspace and the channel notes
     let (workspace_a2, cx_a2) = client_a.build_test_workspace(&mut cx_a2).await;
-    cx_a2.update(|cx| cx.activate_window());
+    cx_a2.update(|window, cx| window.activate_window(cx));
     cx_a2
-        .update(|cx| ChannelView::open(channel, None, workspace_a2, cx))
+        .update(|window, cx| ChannelView::open(channel, None, workspace_a2, window, cx))
         .await
         .unwrap();
     cx_a2.run_until_parked();
@@ -2083,7 +2083,7 @@ async fn test_following_to_channel_notes_other_workspace(
     });
 
     // a returns to the shared project
-    cx_a.update(|cx| cx.activate_window());
+    cx_a.update(|window, cx| window.activate_window(cx));
     cx_a.run_until_parked();
 
     workspace_a.update(cx_a, |workspace, cx| {
@@ -2141,7 +2141,7 @@ async fn test_following_while_deactivated(cx_a: &mut TestAppContext, cx_b: &mut 
 
     // a opens a file in a new window
     let (_, cx_a2) = client_a.build_test_workspace(&mut cx_a2).await;
-    cx_a2.update(|cx| cx.activate_window());
+    cx_a2.update(|window, cx| window.activate_window(cx));
     cx_a2.simulate_keystrokes("cmd-p");
     cx_a2.run_until_parked();
     cx_a2.simulate_keystrokes("3 enter");
@@ -2152,7 +2152,7 @@ async fn test_following_while_deactivated(cx_a: &mut TestAppContext, cx_b: &mut 
     cx_a.run_until_parked();
 
     // a returns to the shared project
-    cx_a.update(|cx| cx.activate_window());
+    cx_a.update(|window, cx| window.activate_window(cx));
     cx_a.run_until_parked();
 
     workspace_a.update(cx_a, |workspace, cx| {

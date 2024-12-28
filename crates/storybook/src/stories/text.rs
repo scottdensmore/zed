@@ -1,6 +1,6 @@
 use gpui::{
-    div, green, red, HighlightStyle, InteractiveText, IntoElement, ParentElement, Render, Styled,
-    StyledText, View, VisualContext, WindowContext,
+    div, green, red, AppContext, HighlightStyle, InteractiveText, IntoElement, ParentElement,
+    Render, Styled, StyledText, View, VisualContext, Window,
 };
 use indoc::indoc;
 use story::*;
@@ -8,8 +8,8 @@ use story::*;
 pub struct TextStory;
 
 impl TextStory {
-    pub fn view(cx: &mut WindowContext) -> View<Self> {
-        cx.new_view(|_cx| Self)
+    pub fn view(window: &mut Window, cx: &mut AppContext) -> View<Self> {
+        window.new_view(cx, |_cx| Self)
     }
 }
 
@@ -94,7 +94,7 @@ impl Render for TextStory {
                                     ],
                                 ),
                             )
-                            .on_click(vec![2..4, 1..3, 7..9], |range_ix, _cx| {
+                            .on_click(vec![2..4, 1..3, 7..9], |range_ix, _window, _cx| {
                                 println!("Clicked range {range_ix}");
                             }),
                         )

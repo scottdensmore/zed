@@ -40,13 +40,13 @@ impl Toggleable for ListSubHeader {
 }
 
 impl RenderOnce for ListSubHeader {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut AppContext) -> impl IntoElement {
         h_flex()
             .flex_1()
             .w_full()
             .relative()
-            .pb(DynamicSpacing::Base04.rems(cx))
-            .px(DynamicSpacing::Base02.rems(cx))
+            .pb(DynamicSpacing::Base04.rems(window, cx))
+            .px(DynamicSpacing::Base02.rems(window, cx))
             .child(
                 div()
                     .h_6()

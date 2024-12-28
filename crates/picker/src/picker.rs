@@ -4,7 +4,7 @@ use gpui::{
     actions, div, impl_actions, list, prelude::*, uniform_list, AnyElement, AppContext, ClickEvent,
     DismissEvent, EventEmitter, FocusHandle, FocusableView, Length, ListSizingBehavior, ListState,
     MouseButton, MouseUpEvent, Render, ScrollStrategy, Task, UniformListScrollHandle, View,
-    ViewContext, WindowContext,
+    ViewContext, Window,
 };
 use head::Head;
 use serde::Deserialize;
@@ -74,11 +74,11 @@ pub trait PickerDelegate: Sized + 'static {
         &self,
         _ix: usize,
         _cx: &mut ViewContext<Picker<Self>>,
-    ) -> Option<Box<dyn Fn(&mut WindowContext) + 'static>> {
+    ) -> Option<Box<dyn Fn(&mut Window, &mut AppContext) + 'static>> {
         None
     }
-    fn placeholder_text(&self, _cx: &mut WindowContext) -> Arc<str>;
-    fn no_matches_text(&self, _cx: &mut WindowContext) -> SharedString {
+    fn placeholder_text(&self, _window: &mut Window, _cx: &mut AppContext) -> Arc<str>;
+    fn no_matches_text(&self, _window: &mut Window, _cx: &mut AppContext) -> SharedString {
         "No matches".into()
     }
     fn update_matches(&mut self, query: String, cx: &mut ViewContext<Picker<Self>>) -> Task<()>;
@@ -236,7 +236,7 @@ impl<D: PickerDelegate> Picker<D> {
                     0,
                     gpui::ListAlignment::Top,
                     px(1000.),
-                    move |ix, cx| {
+                    move |ix, _window, cx| {
                         view.upgrade()
                             .map(|view| {
                                 view.update(cx, |this, cx| {
@@ -265,8 +265,8 @@ impl<D: PickerDelegate> Picker<D> {
         self
     }
 
-    pub fn focus(&self, cx: &mut WindowContext) {
-        self.focus_handle(cx).focus(cx);
+    pub fn focus(&self, window: &mut Window, cx: &mut AppContext) {
+        self.focus_handle(cx).focus(window, cx);
     }
 
     /// Handles the selecting an index, and passing the change to the delegate.
@@ -425,10 +425,10 @@ impl<D: PickerDelegate> Picker<D> {
         self.cancel(&menu::Cancel, cx);
     }
 
-    pub fn refresh_placeholder(&mut self, cx: &mut WindowContext) {
+    pub fn refresh_placeholder(&mut self, window: &mut Window, cx: &mut AppContext) {
         match &self.head {
             Head::Editor(view) => {
-                let placeholder = self.delegate.placeholder_text(cx);
+                let placeholder = self.delegate.placeholder_text(window, cx);
                 view.update(cx, |this, cx| {
                     this.set_placeholder_text(placeholder, cx);
                     cx.notify();
@@ -493,7 +493,7 @@ impl<D: PickerDelegate> Picker<D> {
         }
     }
 
-    pub fn set_query(&self, query: impl Into<Arc<str>>, cx: &mut WindowContext) {
+    pub fn set_query(&self, query: impl Into<Arc<str>>, _window: &mut Window, cx: &mut AppContext) {
         if let Head::Editor(ref editor) = &self.head {
             editor.update(cx, |editor, cx| {
                 editor.set_text(query, cx);

@@ -166,7 +166,7 @@ impl PickerDelegate for FetchContextPickerDelegate {
         }
     }
 
-    fn no_matches_text(&self, _cx: &mut WindowContext) -> SharedString {
+    fn no_matches_text(&self, _window: &mut Window, _cx: &mut AppContext) -> SharedString {
         "Enter the URL that you would like to fetch".into()
     }
 
@@ -176,7 +176,7 @@ impl PickerDelegate for FetchContextPickerDelegate {
 
     fn set_selected_index(&mut self, _ix: usize, _cx: &mut ViewContext<Picker<Self>>) {}
 
-    fn placeholder_text(&self, _cx: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, _window: &mut Window, _cx: &mut AppContext) -> Arc<str> {
         "Enter a URL…".into()
     }
 

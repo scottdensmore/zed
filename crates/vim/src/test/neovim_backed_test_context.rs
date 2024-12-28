@@ -222,8 +222,8 @@ impl NeovimBackedTestContext {
             .set_option(&format!("columns={}", columns))
             .await;
 
-        self.update(|cx| {
-            SettingsStore::update_global(cx, |settings, cx| {
+        self.update(|_window, cx| {
+            SettingsStore::update_global(cx, |settings, _window, cx| {
                 settings.update_user_settings::<AllLanguageSettings>(cx, |settings| {
                     settings.defaults.soft_wrap = Some(SoftWrap::PreferredLineLength);
                     settings.defaults.preferred_line_length = Some(columns);
@@ -250,8 +250,8 @@ impl NeovimBackedTestContext {
 
         let window = self.window;
         let margin = self
-            .update_window(window, |_, cx| {
-                cx.viewport_size().height - line_height * visible_line_count
+            .update_window(window, |_, window, cx| {
+                window.viewport_size(cx).height - line_height * visible_line_count
             })
             .unwrap();
 
@@ -286,7 +286,7 @@ impl NeovimBackedTestContext {
             register,
             state: self.shared_state().await,
             neovim: self.neovim.read_register(register).await,
-            editor: self.update(|cx| {
+            editor: self.update(|_window, cx| {
                 cx.global::<VimGlobals>()
                     .registers
                     .get(&register)

@@ -288,11 +288,11 @@ impl EventEmitter<EditorEvent> for ProposedChangesEditor {}
 impl Item for ProposedChangesEditor {
     type Event = EditorEvent;
 
-    fn tab_icon(&self, _cx: &WindowContext) -> Option<Icon> {
+    fn tab_icon(&self, _window: &Window, _cx: &AppContext) -> Option<Icon> {
         Some(Icon::new(IconName::Diff))
     }
 
-    fn tab_content_text(&self, _cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, _cx: &AppContext) -> Option<SharedString> {
         Some(self.title.clone())
     }
 
@@ -382,7 +382,9 @@ impl Render for ProposedChangesEditorToolbar {
                     .map(|binding| binding.into_any_element());
 
                 button_like.children(keybinding).on_click({
-                    move |_event, cx| focus_handle.dispatch_action(&ApplyAllDiffHunks, cx)
+                    move |_event, window, cx| {
+                        focus_handle.dispatch_action(&ApplyAllDiffHunks, window, cx)
+                    }
                 })
             }
             None => button_like.disabled(true),

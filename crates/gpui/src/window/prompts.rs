@@ -3,9 +3,9 @@ use std::ops::Deref;
 use futures::channel::oneshot;
 
 use crate::{
-    div, opaque_grey, white, AnyView, EventEmitter, FocusHandle, FocusableView, InteractiveElement,
-    IntoElement, ParentElement, PromptLevel, Render, StatefulInteractiveElement, Styled, View,
-    ViewContext, VisualContext, WindowContext,
+    div, opaque_grey, white, AnyView, AppContext, EventEmitter, FocusHandle, FocusableView,
+    InteractiveElement, IntoElement, ParentElement, PromptLevel, Render,
+    StatefulInteractiveElement, Styled, View, ViewContext, VisualContext, Window,
 };
 
 /// The event emitted when a prompt's option is selected.
@@ -32,22 +32,24 @@ impl PromptHandle {
     pub fn with_view<V: Prompt>(
         self,
         view: View<V>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> RenderablePromptHandle {
         let mut sender = Some(self.sender);
-        let previous_focus = cx.focused();
-        cx.subscribe(&view, move |_, e: &PromptResponse, cx| {
-            if let Some(sender) = sender.take() {
-                sender.send(e.0).ok();
-                cx.window.prompt.take();
-                if let Some(previous_focus) = &previous_focus {
-                    cx.focus(previous_focus);
+        let previous_focus = window.focused(cx);
+        window
+            .subscribe(&view, cx, move |_, e: &PromptResponse, window, cx| {
+                if let Some(sender) = sender.take() {
+                    sender.send(e.0).ok();
+                    window.take();
+                    if let Some(previous_focus) = &previous_focus {
+                        window.focus(previous_focus, cx);
+                    }
                 }
-            }
-        })
-        .detach();
+            })
+            .detach();
 
-        cx.focus_view(&view);
+        window.focus_view(&view, cx);
 
         RenderablePromptHandle {
             view: Box::new(view),
@@ -68,9 +70,10 @@ pub fn fallback_prompt_renderer(
     detail: Option<&str>,
     actions: &[&str],
     handle: PromptHandle,
-    cx: &mut WindowContext,
+    window: &mut Window,
+    cx: &mut AppContext,
 ) -> RenderablePromptHandle {
-    let renderer = cx.new_view({
+    let renderer = window.new_view(cx, {
         |cx| FallbackPromptRenderer {
             _level: level,
             message: message.to_string(),
@@ -80,7 +83,7 @@ pub fn fallback_prompt_renderer(
         }
     });
 
-    handle.with_view(renderer, cx)
+    handle.with_view(renderer, window, cx)
 }
 
 /// The default GPUI fallback for rendering prompts, when the platform doesn't support it.
@@ -197,7 +200,8 @@ pub(crate) enum PromptBuilder {
                 Option<&str>,
                 &[&str],
                 PromptHandle,
-                &mut WindowContext,
+                &mut Window,
+                &mut AppContext,
             ) -> RenderablePromptHandle,
         >,
     ),
@@ -210,7 +214,8 @@ impl Deref for PromptBuilder {
         Option<&str>,
         &[&str],
         PromptHandle,
-        &mut WindowContext,
+        &mut Window,
+        &mut AppContext,
     ) -> RenderablePromptHandle;
 
     fn deref(&self) -> &Self::Target {

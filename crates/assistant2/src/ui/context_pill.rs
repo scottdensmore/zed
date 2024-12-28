@@ -8,7 +8,7 @@ use crate::context::{Context, ContextKind};
 #[derive(IntoElement)]
 pub struct ContextPill {
     context: Context,
-    on_remove: Option<Rc<dyn Fn(&ClickEvent, &mut WindowContext)>>,
+    on_remove: Option<Rc<dyn Fn(&ClickEvent, &mut Window, &mut AppContext)>>,
 }
 
 impl ContextPill {
@@ -19,14 +19,17 @@ impl ContextPill {
         }
     }
 
-    pub fn on_remove(mut self, on_remove: Rc<dyn Fn(&ClickEvent, &mut WindowContext)>) -> Self {
+    pub fn on_remove(
+        mut self,
+        on_remove: Rc<dyn Fn(&ClickEvent, &mut Window, &mut AppContext)>,
+    ) -> Self {
         self.on_remove = Some(on_remove);
         self
     }
 }
 
 impl RenderOnce for ContextPill {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut AppContext) -> impl IntoElement {
         let padding_right = if self.on_remove.is_some() {
             px(2.)
         } else {
@@ -57,7 +60,7 @@ impl RenderOnce for ContextPill {
                         .icon_size(IconSize::XSmall)
                         .on_click({
                             let on_remove = on_remove.clone();
-                            move |event, cx| on_remove(event, cx)
+                            move |event, window, cx| on_remove(event, window, cx)
                         }),
                 )
             })

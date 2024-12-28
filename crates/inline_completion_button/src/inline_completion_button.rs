@@ -5,7 +5,7 @@ use feature_flags::{FeatureFlagAppExt, ZetaFeatureFlag};
 use fs::Fs;
 use gpui::{
     actions, div, Action, AppContext, AsyncWindowContext, Corner, Entity, IntoElement,
-    ParentElement, Render, Subscription, View, ViewContext, WeakView, WindowContext,
+    ParentElement, Render, Subscription, View, ViewContext, WeakView, Window,
 };
 use language::{
     language_settings::{
@@ -93,7 +93,7 @@ impl Render for InlineCompletionButton {
                                                     NotificationId::unique::<CopilotErrorToast>(),
                                                     format!("Copilot can't be started: {}", e),
                                                 )
-                                                .on_click("Reinstall Copilot", |cx| {
+                                                .on_click("Reinstall Copilot", |_window, cx| {
                                                     if let Some(copilot) = Copilot::global(cx) {
                                                         copilot
                                                             .update(cx, |copilot, cx| {
@@ -108,14 +108,14 @@ impl Render for InlineCompletionButton {
                                         .ok();
                                 }
                             }))
-                            .tooltip(|cx| Tooltip::text("GitHub Copilot", cx)),
+                            .tooltip(|window, cx| Tooltip::text("GitHub Copilot", window, cx)),
                     );
                 }
                 let this = cx.view().clone();
 
                 div().child(
                     PopoverMenu::new("copilot")
-                        .menu(move |cx| {
+                        .menu(move |_window, cx| {
                             Some(match status {
                                 Status::Authorized => {
                                     this.update(cx, |this, cx| this.build_copilot_context_menu(cx))
@@ -126,7 +126,7 @@ impl Render for InlineCompletionButton {
                         .anchor(Corner::BottomRight)
                         .trigger(
                             IconButton::new("copilot-icon", icon)
-                                .tooltip(|cx| Tooltip::text("GitHub Copilot", cx)),
+                                .tooltip(|window, cx| Tooltip::text("GitHub Copilot", window, cx)),
                         ),
                 )
             }
@@ -165,18 +165,18 @@ impl Render for InlineCompletionButton {
 
                 return div().child(
                     PopoverMenu::new("supermaven")
-                        .menu(move |cx| match &status {
+                        .menu(move |window, cx| match &status {
                             SupermavenButtonStatus::NeedsActivation(activate_url) => {
-                                Some(ContextMenu::build(cx, |menu, _| {
+                                Some(ContextMenu::build(window, cx, |menu, _| {
                                     let fs = fs.clone();
                                     let activate_url = activate_url.clone();
-                                    menu.entry("Sign In", None, move |cx| {
+                                    menu.entry("Sign In", None, move |_window, cx| {
                                         cx.open_url(activate_url.as_str())
                                     })
                                     .entry(
                                         "Use Copilot",
                                         None,
-                                        move |cx| {
+                                        move |_window, cx| {
                                             set_completion_provider(
                                                 fs.clone(),
                                                 cx,
@@ -192,10 +192,9 @@ impl Render for InlineCompletionButton {
                             _ => None,
                         })
                         .anchor(Corner::BottomRight)
-                        .trigger(
-                            IconButton::new("supermaven-icon", icon)
-                                .tooltip(move |cx| Tooltip::text(tooltip_text.clone(), cx)),
-                        ),
+                        .trigger(IconButton::new("supermaven-icon", icon).tooltip(
+                            move |window, cx| Tooltip::text(tooltip_text.clone(), window, cx),
+                        )),
                 );
             }
 
@@ -206,11 +205,12 @@ impl Render for InlineCompletionButton {
 
                 div().child(
                     IconButton::new("zeta", IconName::ZedPredict)
-                        .tooltip(|cx| {
+                        .tooltip(|window, cx| {
                             Tooltip::with_meta(
                                 "Zed Predict",
                                 Some(&RateCompletions),
                                 "Click to rate completions",
+                                window,
                                 cx,
                             )
                         })
@@ -256,11 +256,11 @@ impl InlineCompletionButton {
             menu.entry("Sign In", None, copilot::initiate_sign_in)
                 .entry("Disable Copilot", None, {
                     let fs = fs.clone();
-                    move |cx| hide_copilot(fs.clone(), cx)
+                    move |_window, cx| hide_copilot(fs.clone(), cx)
                 })
                 .entry("Use Supermaven", None, {
                     let fs = fs.clone();
-                    move |cx| {
+                    move |_window, cx| {
                         set_completion_provider(
                             fs.clone(),
                             cx,
@@ -274,7 +274,8 @@ impl InlineCompletionButton {
     pub fn build_language_settings_menu(
         &self,
         mut menu: ContextMenu,
-        cx: &mut WindowContext,
+        _window: &mut Window,
+        cx: &mut AppContext,
     ) -> ContextMenu {
         let fs = self.fs.clone();
 
@@ -291,7 +292,9 @@ impl InlineCompletionButton {
                     language.name()
                 ),
                 None,
-                move |cx| toggle_inline_completions_for_language(language.clone(), fs.clone(), cx),
+                move |_window, cx| {
+                    toggle_inline_completions_for_language(language.clone(), fs.clone(), cx)
+                },
             );
         }
 
@@ -307,18 +310,19 @@ impl InlineCompletionButton {
                     if path_enabled { "Hide" } else { "Show" }
                 ),
                 None,
-                move |cx| {
-                    if let Some(workspace) = cx.window_handle().downcast::<Workspace>() {
+                move |window, cx| {
+                    if let Some(workspace) = window.window_handle(cx).downcast::<Workspace>() {
                         if let Ok(workspace) = workspace.root_view(cx) {
                             let workspace = workspace.downgrade();
-                            cx.spawn(|cx| {
-                                configure_disabled_globs(
-                                    workspace,
-                                    path_enabled.then_some(path.clone()),
-                                    cx,
-                                )
-                            })
-                            .detach_and_log_err(cx);
+                            window
+                                .spawn(cx, |cx| {
+                                    configure_disabled_globs(
+                                        workspace,
+                                        path_enabled.then_some(path.clone()),
+                                        cx,
+                                    )
+                                })
+                                .detach_and_log_err(cx);
                         }
                     }
                 },
@@ -333,7 +337,7 @@ impl InlineCompletionButton {
                 "Show Inline Completions for All Files"
             },
             None,
-            move |cx| toggle_inline_completions_globally(fs.clone(), cx),
+            move |_window, cx| toggle_inline_completions_globally(fs.clone(), cx),
         )
     }
 

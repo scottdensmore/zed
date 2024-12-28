@@ -13,7 +13,7 @@ use editor::{
     display_map::ToDisplayPoint,
     Bias, Editor, ToPoint,
 };
-use gpui::{actions, impl_actions, Action, AppContext, Global, ViewContext, WindowContext};
+use gpui::{actions, impl_actions, Action, AppContext, Global, ViewContext, Window};
 use language::Point;
 use multi_buffer::MultiBufferRow;
 use regex::Regex;
@@ -433,9 +433,10 @@ impl Position {
         &self,
         vim: &Vim,
         editor: &mut Editor,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Result<MultiBufferRow> {
-        let snapshot = editor.snapshot(cx);
+        let snapshot = editor.snapshot(window, cx);
         let target = match self {
             Position::Line { row, offset } => row.saturating_add_signed(offset.saturating_sub(1)),
             Position::Mark { name, offset } => {
@@ -479,11 +480,12 @@ impl CommandRange {
         &self,
         vim: &Vim,
         editor: &mut Editor,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Result<Range<MultiBufferRow>> {
-        let start = self.start.buffer_row(vim, editor, cx)?;
+        let start = self.start.buffer_row(vim, editor, window, cx)?;
         let end = if let Some(end) = self.end.as_ref() {
-            end.buffer_row(vim, editor, cx)?
+            end.buffer_row(vim, editor, window, cx)?
         } else {
             start
         };

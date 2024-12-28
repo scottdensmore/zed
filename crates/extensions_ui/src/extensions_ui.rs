@@ -15,7 +15,7 @@ use fuzzy::{match_strings, StringMatchCandidate};
 use gpui::{
     actions, uniform_list, Action, AppContext, ClipboardItem, EventEmitter, Flatten, FocusableView,
     InteractiveElement, KeyContext, ParentElement, Render, Styled, Task, TextStyle,
-    UniformListScrollHandle, View, ViewContext, VisualContext, WeakView, WindowContext,
+    UniformListScrollHandle, View, ViewContext, VisualContext, WeakView, Window,
 };
 use num_format::{Locale, ToFormattedString};
 use project::DirectoryLister;
@@ -417,7 +417,7 @@ impl ExtensionsPage {
                                 )
                                 .on_click({
                                     let extension_id = extension.id.clone();
-                                    move |_, cx| {
+                                    move |_, _window, cx| {
                                         ExtensionStore::global(cx).update(cx, |store, cx| {
                                             store.rebuild_dev_extension(extension_id.clone(), cx)
                                         });
@@ -430,7 +430,7 @@ impl ExtensionsPage {
                                 Button::new(SharedString::from(extension.id.clone()), "Uninstall")
                                     .on_click({
                                         let extension_id = extension.id.clone();
-                                        move |_, cx| {
+                                        move |_, _window, cx| {
                                             ExtensionStore::global(cx).update(cx, |store, cx| {
                                                 store.uninstall_extension(extension_id.clone(), cx)
                                             });
@@ -484,7 +484,9 @@ impl ExtensionsPage {
                                 cx.open_url(&repository_url);
                             }
                         }))
-                        .tooltip(move |cx| Tooltip::text(repository_url.clone(), cx))
+                        .tooltip(move |window, cx| {
+                            Tooltip::text(repository_url.clone(), window, cx)
+                        })
                     })),
             )
     }
@@ -592,7 +594,9 @@ impl ExtensionsPage {
                                         cx.open_url(&repository_url);
                                     }
                                 }))
-                                .tooltip(move |cx| Tooltip::text(repository_url.clone(), cx)),
+                                .tooltip(move |window, cx| {
+                                    Tooltip::text(repository_url.clone(), window, cx)
+                                }),
                             )
                             .child(
                                 PopoverMenu::new(SharedString::from(format!(
@@ -608,10 +612,11 @@ impl ExtensionsPage {
                                     .icon_size(IconSize::Small)
                                     .style(ButtonStyle::Filled),
                                 )
-                                .menu(move |cx| {
+                                .menu(move |window, cx| {
                                     Some(Self::render_remote_extension_context_menu(
                                         &this,
                                         extension_id.clone(),
+                                        window,
                                         cx,
                                     ))
                                 }),
@@ -623,9 +628,10 @@ impl ExtensionsPage {
     fn render_remote_extension_context_menu(
         this: &View<Self>,
         extension_id: Arc<str>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> View<ContextMenu> {
-        let context_menu = ContextMenu::build(cx, |context_menu, cx| {
+        let context_menu = ContextMenu::build(window, cx, |context_menu, cx| {
             context_menu
                 .entry(
                     "Install Another Version...",
@@ -637,7 +643,7 @@ impl ExtensionsPage {
                 )
                 .entry("Copy Extension ID", None, {
                     let extension_id = extension_id.clone();
-                    move |cx| {
+                    move |_window, cx| {
                         cx.write_to_clipboard(ClipboardItem::new_string(extension_id.to_string()));
                     }
                 })
@@ -703,7 +709,7 @@ impl ExtensionsPage {
             ExtensionStatus::NotInstalled => (
                 Button::new(SharedString::from(extension.id.clone()), "Install").on_click({
                     let extension_id = extension.id.clone();
-                    move |_, cx| {
+                    move |_, _window, cx| {
                         telemetry::event!("Extension Installed");
                         ExtensionStore::global(cx).update(cx, |store, cx| {
                             store.install_latest_extension(extension_id.clone(), cx)
@@ -725,7 +731,7 @@ impl ExtensionsPage {
             ExtensionStatus::Installed(installed_version) => (
                 Button::new(SharedString::from(extension.id.clone()), "Uninstall").on_click({
                     let extension_id = extension.id.clone();
-                    move |_, cx| {
+                    move |_, _window, cx| {
                         telemetry::event!("Extension Uninstalled", extension_id);
                         ExtensionStore::global(cx).update(cx, |store, cx| {
                             store.uninstall_extension(extension_id.clone(), cx)
@@ -740,12 +746,12 @@ impl ExtensionsPage {
                             .when(!is_compatible, |upgrade_button| {
                                 upgrade_button.disabled(true).tooltip({
                                     let version = extension.manifest.version.clone();
-                                    move |cx| {
+                                    move |window, cx| {
                                         Tooltip::text(
                                             format!(
                                                 "v{version} is not compatible with this version of Zed.",
                                             ),
-                                            cx,
+                                            window, cx,
                                         )
                                     }
                                 })
@@ -754,7 +760,7 @@ impl ExtensionsPage {
                             .on_click({
                                 let extension_id = extension.id.clone();
                                 let version = extension.manifest.version.clone();
-                                move |_, cx| {
+                                move |_, _window, cx| {
                                     telemetry::event!("Extension Installed", extension_id, version);
                                     ExtensionStore::global(cx).update(cx, |store, cx| {
                                         store
@@ -869,7 +875,7 @@ impl ExtensionsPage {
         }));
     }
 
-    pub fn search_query(&self, cx: &WindowContext) -> Option<String> {
+    pub fn search_query(&self, _window: &Window, cx: &AppContext) -> Option<String> {
         let search = self.query_editor.read(cx).text(cx);
         if search.trim().is_empty() {
             None
@@ -1036,8 +1042,8 @@ impl Render for ExtensionsPage {
                                 Button::new("install-dev-extension", "Install Dev Extension")
                                     .style(ButtonStyle::Filled)
                                     .size(ButtonSize::Large)
-                                    .on_click(|_event, cx| {
-                                        cx.dispatch_action(Box::new(InstallDevExtension))
+                                    .on_click(|_event, window, cx| {
+                                        window.dispatch_action(Box::new(InstallDevExtension), cx)
                                     }),
                             ),
                     )
@@ -1058,8 +1064,8 @@ impl Render for ExtensionsPage {
                                                 this.filter = ExtensionFilter::All;
                                                 this.filter_extension_entries(cx);
                                             }))
-                                            .tooltip(move |cx| {
-                                                Tooltip::text("Show all extensions", cx)
+                                            .tooltip(move |window, cx| {
+                                                Tooltip::text("Show all extensions", window, cx)
                                             })
                                             .first(),
                                     )
@@ -1072,8 +1078,12 @@ impl Render for ExtensionsPage {
                                                 this.filter = ExtensionFilter::Installed;
                                                 this.filter_extension_entries(cx);
                                             }))
-                                            .tooltip(move |cx| {
-                                                Tooltip::text("Show installed extensions", cx)
+                                            .tooltip(move |window, cx| {
+                                                Tooltip::text(
+                                                    "Show installed extensions",
+                                                    window,
+                                                    cx,
+                                                )
                                             })
                                             .middle(),
                                     )
@@ -1088,8 +1098,12 @@ impl Render for ExtensionsPage {
                                                 this.filter = ExtensionFilter::NotInstalled;
                                                 this.filter_extension_entries(cx);
                                             }))
-                                            .tooltip(move |cx| {
-                                                Tooltip::text("Show not installed extensions", cx)
+                                            .tooltip(move |window, cx| {
+                                                Tooltip::text(
+                                                    "Show not installed extensions",
+                                                    window,
+                                                    cx,
+                                                )
                                             })
                                             .last(),
                                     ),
@@ -1130,7 +1144,7 @@ impl FocusableView for ExtensionsPage {
 impl Item for ExtensionsPage {
     type Event = ItemEvent;
 
-    fn tab_content_text(&self, _cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, _cx: &AppContext) -> Option<SharedString> {
         Some("Extensions".into())
     }
 

@@ -80,7 +80,7 @@ impl Item for ThemePreview {
 
     fn to_item_events(_: &Self::Event, _: impl FnMut(crate::item::ItemEvent)) {}
 
-    fn tab_content_text(&self, cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, cx: &AppContext) -> Option<SharedString> {
         let name = cx.theme().name.clone();
         Some(format!("{} Preview", name).into())
     }
@@ -104,7 +104,7 @@ impl Item for ThemePreview {
 const AVATAR_URL: &str = "https://avatars.githubusercontent.com/u/1714999?v=4";
 
 impl ThemePreview {
-    fn preview_bg(cx: &WindowContext) -> Hsla {
+    fn preview_bg(_window: &Window, cx: &AppContext) -> Hsla {
         cx.theme().colors().editor_background
     }
 
@@ -299,9 +299,15 @@ impl ThemePreview {
                                 )
                                 .size(ButtonSize::None)
                                 .style(ButtonStyle::Transparent)
-                                .tooltip(move |cx| {
+                                .tooltip(move |window, cx| {
                                     let name = name.clone();
-                                    Tooltip::with_meta(name, None, format!("{:?}", color), cx)
+                                    Tooltip::with_meta(
+                                        name,
+                                        None,
+                                        format!("{:?}", color),
+                                        window,
+                                        cx,
+                                    )
                                 }),
                         )
                     })),
@@ -361,7 +367,7 @@ impl ThemePreview {
             )
     }
 
-    fn render_components_page(&self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render_components_page(&self, window: &mut Window, cx: &mut AppContext) -> impl IntoElement {
         let layer = ElevationIndex::Surface;
 
         v_flex()
@@ -369,18 +375,18 @@ impl ThemePreview {
             .overflow_scroll()
             .size_full()
             .gap_2()
-            .child(Button::render_component_previews(cx))
-            .child(Checkbox::render_component_previews(cx))
-            .child(CheckboxWithLabel::render_component_previews(cx))
-            .child(ContentGroup::render_component_previews(cx))
-            .child(DecoratedIcon::render_component_previews(cx))
-            .child(Facepile::render_component_previews(cx))
-            .child(Icon::render_component_previews(cx))
-            .child(IconDecoration::render_component_previews(cx))
-            .child(Indicator::render_component_previews(cx))
-            .child(Switch::render_component_previews(cx))
-            .child(SwitchWithLabel::render_component_previews(cx))
-            .child(Table::render_component_previews(cx))
+            .child(Button::render_component_previews(window, cx))
+            .child(Checkbox::render_component_previews(window, cx))
+            .child(CheckboxWithLabel::render_component_previews(window, cx))
+            .child(ContentGroup::render_component_previews(window, cx))
+            .child(DecoratedIcon::render_component_previews(window, cx))
+            .child(Facepile::render_component_previews(window, cx))
+            .child(Icon::render_component_previews(window, cx))
+            .child(IconDecoration::render_component_previews(window, cx))
+            .child(Indicator::render_component_previews(window, cx))
+            .child(Switch::render_component_previews(window, cx))
+            .child(SwitchWithLabel::render_component_previews(window, cx))
+            .child(Table::render_component_previews(window, cx))
     }
 
     fn render_page_nav(&self, cx: &ViewContext<Self>) -> impl IntoElement {

@@ -114,10 +114,10 @@ impl Render for PaintingViewer {
                     .child(
                         canvas(
                             move |_, _| {},
-                            move |_, _, cx| {
+                            move |_, _, window, cx| {
                                 const STROKE_WIDTH: Pixels = px(2.0);
                                 for path in default_lines {
-                                    cx.paint_path(path, gpui::black());
+                                    window.paint_path(path, gpui::black(), cx);
                                 }
                                 for points in lines {
                                     let mut path = Path::new(points[0]);
@@ -135,7 +135,7 @@ impl Render for PaintingViewer {
                                         last = p;
                                     }
 
-                                    cx.paint_path(path, gpui::black());
+                                    window.paint_path(path, gpui::black(), cx);
                                 }
                             },
                         )
@@ -191,7 +191,7 @@ fn main() {
                 focus: true,
                 ..Default::default()
             },
-            |cx| cx.new_view(|_| PaintingViewer::new()),
+            |window, cx| window.new_view(cx, |_| PaintingViewer::new()),
         )
         .unwrap();
         cx.activate(true);

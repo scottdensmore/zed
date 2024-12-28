@@ -101,11 +101,11 @@ impl<T: PopoverTrigger> LanguageModelSelectorPopoverMenu<T> {
 }
 
 impl<T: PopoverTrigger> RenderOnce for LanguageModelSelectorPopoverMenu<T> {
-    fn render(self, _cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut AppContext) -> impl IntoElement {
         let language_model_selector = self.language_model_selector.clone();
 
         PopoverMenu::new("model-switcher")
-            .menu(move |_cx| Some(language_model_selector.clone()))
+            .menu(move |_window, _cx| Some(language_model_selector.clone()))
             .trigger(self.trigger)
             .attach(gpui::Corner::BottomLeft)
             .when_some(self.handle.clone(), |menu, handle| menu.with_handle(handle))
@@ -143,7 +143,7 @@ impl PickerDelegate for LanguageModelPickerDelegate {
         cx.notify();
     }
 
-    fn placeholder_text(&self, _cx: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, _window: &mut Window, _cx: &mut AppContext) -> Arc<str> {
         "Select a model...".into()
     }
 
@@ -335,8 +335,9 @@ impl PickerDelegate for LanguageModelPickerDelegate {
                             .icon_size(IconSize::Small)
                             .icon_color(Color::Muted)
                             .icon_position(IconPosition::Start)
-                            .on_click(|_, cx| {
-                                cx.dispatch_action(Box::new(zed_actions::OpenAccountSettings))
+                            .on_click(|_, window, cx| {
+                                window
+                                    .dispatch_action(Box::new(zed_actions::OpenAccountSettings), cx)
                             }),
                         // Free user
                         Plan::Free => Button::new(
@@ -347,7 +348,7 @@ impl PickerDelegate for LanguageModelPickerDelegate {
                                 "Try Pro"
                             },
                         )
-                        .on_click(|_, cx| cx.open_url(TRY_ZED_PRO_URL)),
+                        .on_click(|_, _window, cx| cx.open_url(TRY_ZED_PRO_URL)),
                     })
                 })
                 .child(
@@ -356,8 +357,8 @@ impl PickerDelegate for LanguageModelPickerDelegate {
                         .icon_size(IconSize::Small)
                         .icon_color(Color::Muted)
                         .icon_position(IconPosition::Start)
-                        .on_click(|_, cx| {
-                            cx.dispatch_action(ShowConfiguration.boxed_clone());
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(ShowConfiguration.boxed_clone(), cx);
                         }),
                 )
                 .into_any(),

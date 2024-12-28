@@ -580,7 +580,7 @@ impl Editor {
                                 .on_click({
                                     let editor = editor.clone();
                                     let hunk = hunk.clone();
-                                    move |_event, cx| {
+                                    move |_event, _window, cx| {
                                         editor.update(cx, |editor, cx| {
                                             editor.toggle_hovered_hunk(&hunk, cx);
                                         });
@@ -603,11 +603,12 @@ impl Editor {
                                                     .disabled(!has_multiple_hunks)
                                                     .tooltip({
                                                         let focus_handle = editor.focus_handle(cx);
-                                                        move |cx| {
+                                                        move |window, cx| {
                                                             Tooltip::for_action_in(
                                                                 "Next Hunk",
                                                                 &GoToHunk,
                                                                 &focus_handle,
+                                                                window,
                                                                 cx,
                                                             )
                                                         }
@@ -615,7 +616,7 @@ impl Editor {
                                                     .on_click({
                                                         let editor = editor.clone();
                                                         let hunk = hunk.clone();
-                                                        move |_event, cx| {
+                                                        move |_event, _window, cx| {
                                                             editor.update(cx, |editor, cx| {
                                                                 editor.go_to_subsequent_hunk(
                                                                     hunk.multi_buffer_range.end,
@@ -632,11 +633,12 @@ impl Editor {
                                                     .disabled(!has_multiple_hunks)
                                                     .tooltip({
                                                         let focus_handle = editor.focus_handle(cx);
-                                                        move |cx| {
+                                                        move |window, cx| {
                                                             Tooltip::for_action_in(
                                                                 "Previous Hunk",
                                                                 &GoToPrevHunk,
                                                                 &focus_handle,
+                                                                window,
                                                                 cx,
                                                             )
                                                         }
@@ -644,7 +646,7 @@ impl Editor {
                                                     .on_click({
                                                         let editor = editor.clone();
                                                         let hunk = hunk.clone();
-                                                        move |_event, cx| {
+                                                        move |_event, _window, cx| {
                                                             editor.update(cx, |editor, cx| {
                                                                 editor.go_to_preceding_hunk(
                                                                     hunk.multi_buffer_range.start,
@@ -661,11 +663,12 @@ impl Editor {
                                                 .icon_size(IconSize::Small)
                                                 .tooltip({
                                                     let focus_handle = editor.focus_handle(cx);
-                                                    move |cx| {
+                                                    move |window, cx| {
                                                         Tooltip::for_action_in(
                                                             "Discard Hunk",
                                                             &RevertSelectedHunks,
                                                             &focus_handle,
+                                                            window,
                                                             cx,
                                                         )
                                                     }
@@ -673,7 +676,7 @@ impl Editor {
                                                 .on_click({
                                                     let editor = editor.clone();
                                                     let hunk = hunk.clone();
-                                                    move |_event, cx| {
+                                                    move |_event, _window, cx| {
                                                         editor.update(cx, |editor, cx| {
                                                             editor.revert_hunk(hunk.clone(), cx);
                                                         });
@@ -689,11 +692,12 @@ impl Editor {
                                                         .tooltip({
                                                             let focus_handle =
                                                                 editor.focus_handle(cx);
-                                                            move |cx| {
+                                                            move |window, cx| {
                                                                 Tooltip::for_action_in(
                                                                     "Apply Hunk",
                                                                     &ApplyDiffHunk,
                                                                     &focus_handle,
+                                                                    window,
                                                                     cx,
                                                                 )
                                                             }
@@ -701,7 +705,7 @@ impl Editor {
                                                         .on_click({
                                                             let editor = editor.clone();
                                                             let hunk = hunk.clone();
-                                                            move |_event, cx| {
+                                                            move |_event, _window, cx| {
                                                                 editor.update(cx, |editor, cx| {
                                                                     editor
                                                                         .apply_diff_hunks_in_range(
@@ -733,9 +737,10 @@ impl Editor {
                                                                 !hunk_controls_menu_handle
                                                                     .is_deployed(),
                                                                 |this| {
-                                                                    this.tooltip(|cx| {
+                                                                    this.tooltip(|window, cx| {
                                                                         Tooltip::text(
                                                                             "Hunk Controls",
+                                                                            window,
                                                                             cx,
                                                                         )
                                                                     })
@@ -744,9 +749,10 @@ impl Editor {
                                                         )
                                                         .anchor(Corner::TopRight)
                                                         .with_handle(hunk_controls_menu_handle)
-                                                        .menu(move |cx| {
+                                                        .menu(move |window, cx| {
                                                             let focus = focus.clone();
                                                             let menu = ContextMenu::build(
+                                                                window,
                                                                 cx,
                                                                 move |menu, _| {
                                                                     menu.context(focus.clone())
@@ -770,11 +776,12 @@ impl Editor {
                                             .icon_size(IconSize::Small)
                                             .tooltip({
                                                 let focus_handle = editor.focus_handle(cx);
-                                                move |cx| {
+                                                move |window, cx| {
                                                     Tooltip::for_action_in(
                                                         "Collapse Hunk",
                                                         &ToggleHunkDiff,
                                                         &focus_handle,
+                                                        window,
                                                         cx,
                                                     )
                                                 }
@@ -782,7 +789,7 @@ impl Editor {
                                             .on_click({
                                                 let editor = editor.clone();
                                                 let hunk = hunk.clone();
-                                                move |_event, cx| {
+                                                move |_event, _window, cx| {
                                                     editor.update(cx, |editor, cx| {
                                                         editor.toggle_hovered_hunk(&hunk, cx);
                                                     });
@@ -850,7 +857,7 @@ impl Editor {
                                     .on_mouse_down(MouseButton::Left, {
                                         let editor = editor.clone();
                                         let hunk = hunk.clone();
-                                        move |_event, cx| {
+                                        move |_event, _window, cx| {
                                             editor.update(cx, |editor, cx| {
                                                 editor.toggle_hovered_hunk(&hunk, cx);
                                             });
@@ -1184,7 +1191,7 @@ fn editor_with_deleted_text(
             .register_action::<RevertSelectedHunks>({
                 let hunk = hunk.clone();
                 let parent_editor = parent_editor.clone();
-                move |_, cx| {
+                move |_, _window, cx| {
                     parent_editor
                         .update(cx, |editor, cx| editor.revert_hunk(hunk.clone(), cx))
                         .ok();
@@ -1194,7 +1201,7 @@ fn editor_with_deleted_text(
         editor
             .register_action::<ToggleHunkDiff>({
                 let hunk = hunk.clone();
-                move |_, cx| {
+                move |_, _window, cx| {
                     parent_editor
                         .update(cx, |editor, cx| {
                             editor.toggle_hovered_hunk(&hunk, cx);

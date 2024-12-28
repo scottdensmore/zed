@@ -206,7 +206,7 @@ impl Render for GradientViewer {
             )
             .child(div().h_24().child(canvas(
                 move |_, _| {},
-                move |bounds, _, cx| {
+                move |bounds, _, window, cx| {
                     let size = size(bounds.size.width * 0.8, px(80.));
                     let square_bounds = Bounds {
                         origin: point(
@@ -225,7 +225,7 @@ impl Render for GradientViewer {
                     );
                     path.line_to(square_bounds.bottom_right());
                     path.line_to(square_bounds.bottom_left());
-                    cx.paint_path(
+                    window.paint_path(
                         path,
                         linear_gradient(
                             180.,
@@ -233,6 +233,7 @@ impl Render for GradientViewer {
                             linear_color_stop(gpui::blue(), 1.),
                         )
                         .color_space(color_space),
+                        cx,
                     );
                 },
             )))
@@ -246,7 +247,7 @@ fn main() {
                 focus: true,
                 ..Default::default()
             },
-            |cx| cx.new_view(|_| GradientViewer::new()),
+            |window, cx| window.new_view(cx, |_| GradientViewer::new()),
         )
         .unwrap();
         cx.activate(true);

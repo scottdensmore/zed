@@ -196,8 +196,8 @@ mod test {
 
         let window = cx.window;
         let margin = cx
-            .update_window(window, |_, cx| {
-                cx.viewport_size().height - line_height * visible_line_count
+            .update_window(window, |_, window, cx| {
+                window.viewport_size(cx).height - line_height * visible_line_count
             })
             .unwrap();
         cx.simulate_window_resize(

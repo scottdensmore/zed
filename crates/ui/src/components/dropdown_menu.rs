@@ -41,10 +41,10 @@ impl Disableable for DropdownMenu {
 }
 
 impl RenderOnce for DropdownMenu {
-    fn render(self, _cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut AppContext) -> impl IntoElement {
         PopoverMenu::new(self.id)
             .full_width(self.full_width)
-            .menu(move |_cx| Some(self.menu.clone()))
+            .menu(move |_window, _cx| Some(self.menu.clone()))
             .trigger(DropdownMenuTrigger::new(self.label).full_width(self.full_width))
             .attach(Corner::BottomLeft)
     }
@@ -57,7 +57,7 @@ struct DropdownMenuTrigger {
     selected: bool,
     disabled: bool,
     cursor_style: CursorStyle,
-    on_click: Option<Box<dyn Fn(&ClickEvent, &mut WindowContext) + 'static>>,
+    on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut AppContext) + 'static>>,
 }
 
 impl DropdownMenuTrigger {
@@ -93,7 +93,10 @@ impl Toggleable for DropdownMenuTrigger {
 }
 
 impl Clickable for DropdownMenuTrigger {
-    fn on_click(mut self, handler: impl Fn(&ClickEvent, &mut WindowContext) + 'static) -> Self {
+    fn on_click(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut AppContext) + 'static,
+    ) -> Self {
         self.on_click = Some(Box::new(handler));
         self
     }
@@ -105,7 +108,7 @@ impl Clickable for DropdownMenuTrigger {
 }
 
 impl RenderOnce for DropdownMenuTrigger {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, cx: &mut AppContext) -> impl IntoElement {
         let disabled = self.disabled;
 
         h_flex()
@@ -147,11 +150,13 @@ impl RenderOnce for DropdownMenuTrigger {
                     }),
             )
             .when_some(self.on_click.filter(|_| !disabled), |el, on_click| {
-                el.on_mouse_down(MouseButton::Left, |_, cx| cx.prevent_default())
-                    .on_click(move |event, cx| {
-                        cx.stop_propagation();
-                        (on_click)(event, cx)
-                    })
+                el.on_mouse_down(MouseButton::Left, |_, window, cx| {
+                    window.prevent_default(cx)
+                })
+                .on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    (on_click)(event, window, cx)
+                })
             })
     }
 }

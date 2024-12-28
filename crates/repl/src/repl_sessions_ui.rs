@@ -99,12 +99,12 @@ pub fn init(cx: &mut AppContext) {
             editor
                 .register_action({
                     let editor_handle = editor_handle.clone();
-                    move |_: &Run, cx| {
+                    move |_: &Run, window, cx| {
                         if !JupyterSettings::enabled(cx) {
                             return;
                         }
 
-                        crate::run(editor_handle.clone(), true, cx).log_err();
+                        crate::run(editor_handle.clone(), true, window, cx).log_err();
                     }
                 })
                 .detach();
@@ -112,12 +112,12 @@ pub fn init(cx: &mut AppContext) {
             editor
                 .register_action({
                     let editor_handle = editor_handle.clone();
-                    move |_: &RunInPlace, cx| {
+                    move |_: &RunInPlace, window, cx| {
                         if !JupyterSettings::enabled(cx) {
                             return;
                         }
 
-                        crate::run(editor_handle.clone(), false, cx).log_err();
+                        crate::run(editor_handle.clone(), false, window, cx).log_err();
                     }
                 })
                 .detach();
@@ -160,7 +160,7 @@ impl FocusableView for ReplSessionsPage {
 impl Item for ReplSessionsPage {
     type Event = ItemEvent;
 
-    fn tab_content_text(&self, _cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, _cx: &AppContext) -> Option<SharedString> {
         Some("REPL Sessions".into())
     }
 
@@ -214,7 +214,7 @@ impl Render for ReplSessionsPage {
                             .size(ButtonSize::Large)
                             .layer(ElevationIndex::ModalSurface)
                             .child(Label::new("Install Kernels"))
-                            .on_click(move |_, cx| {
+                            .on_click(move |_, _window, cx| {
                                 cx.open_url(
                                     "https://zed.dev/docs/repl#language-specific-instructions",
                                 )
@@ -260,7 +260,7 @@ impl ParentElement for ReplSessionsContainer {
 }
 
 impl RenderOnce for ReplSessionsContainer {
-    fn render(self, _cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, _window: &mut Window, _cx: &mut AppContext) -> impl IntoElement {
         v_flex()
             .p_4()
             .gap_2()

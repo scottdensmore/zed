@@ -65,8 +65,8 @@ impl Vim {
         if let Some(Operator::Literal { prefix }) = self.active_operator() {
             if let Some(prefix) = prefix {
                 if let Some(keystroke) = Keystroke::parse(&action.0).ok() {
-                    cx.window_context().defer(|cx| {
-                        cx.dispatch_keystroke(keystroke);
+                    cx.window_context().defer(|window, cx| {
+                        window.dispatch_keystroke(keystroke, cx);
                     });
                 }
                 return self.handle_literal_input(prefix, "", cx);
@@ -97,8 +97,8 @@ impl Vim {
         // of waiting mode.
         if keystroke_event.action.is_none() {
             let keystroke = keystroke_event.keystroke.clone();
-            cx.window_context().defer(|cx| {
-                cx.dispatch_keystroke(keystroke);
+            cx.window_context().defer(|window, cx| {
+                window.dispatch_keystroke(keystroke, cx);
             });
         }
         return;

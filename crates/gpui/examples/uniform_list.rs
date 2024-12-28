@@ -18,7 +18,7 @@ impl Render for UniformListExample {
                             .id(ix)
                             .px_2()
                             .cursor_pointer()
-                            .on_click(move |_event, _cx| {
+                            .on_click(move |_event, _window, _cx| {
                                 println!("clicked Item {item:?}");
                             })
                             .child(format!("Item {item}")),
@@ -39,7 +39,7 @@ fn main() {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
-            |cx| cx.new_view(|_cx| UniformListExample {}),
+            |window, cx| window.new_view(cx, |_cx| UniformListExample {}),
         )
         .unwrap();
     });

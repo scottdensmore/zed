@@ -24,7 +24,12 @@ struct Match {
 }
 
 impl Match {
-    fn entry<'a>(&'a self, project: &'a Project, cx: &'a WindowContext) -> Option<&'a Entry> {
+    fn entry<'a>(
+        &'a self,
+        project: &'a Project,
+        _window: &'a Window,
+        cx: &'a AppContext,
+    ) -> Option<&'a Entry> {
         if let Some(suffix) = &self.suffix {
             let (worktree, path) = if let Some(path_match) = &self.path_match {
                 (
@@ -45,8 +50,8 @@ impl Match {
         }
     }
 
-    fn is_dir(&self, project: &Project, cx: &WindowContext) -> bool {
-        self.entry(project, cx).is_some_and(|e| e.is_dir())
+    fn is_dir(&self, project: &Project, window: &Window, cx: &AppContext) -> bool {
+        self.entry(project, window, cx).is_some_and(|e| e.is_dir())
             || self.suffix.as_ref().is_some_and(|s| s.ends_with('/'))
     }
 
@@ -68,7 +73,12 @@ impl Match {
         }
     }
 
-    fn project_path(&self, project: &Project, cx: &WindowContext) -> Option<ProjectPath> {
+    fn project_path(
+        &self,
+        project: &Project,
+        _window: &Window,
+        cx: &AppContext,
+    ) -> Option<ProjectPath> {
         let worktree_id = if let Some(path_match) = &self.path_match {
             WorktreeId::from_usize(path_match.worktree_id)
         } else if let Some(worktree) = project.visible_worktrees(cx).find(|worktree| {
@@ -91,7 +101,12 @@ impl Match {
         })
     }
 
-    fn existing_prefix(&self, project: &Project, cx: &WindowContext) -> Option<PathBuf> {
+    fn existing_prefix(
+        &self,
+        project: &Project,
+        _window: &Window,
+        cx: &AppContext,
+    ) -> Option<PathBuf> {
         let worktree = project.worktrees(cx).next()?.read(cx);
         let mut prefix = PathBuf::new();
         let parts = self.suffix.as_ref()?.split('/');
@@ -105,7 +120,7 @@ impl Match {
         None
     }
 
-    fn styled_text(&self, project: &Project, cx: &WindowContext) -> StyledText {
+    fn styled_text(&self, project: &Project, window: &Window, cx: &AppContext) -> StyledText {
         let mut text = "./".to_string();
         let mut highlights = Vec::new();
         let mut offset = text.as_bytes().len();
@@ -120,7 +135,7 @@ impl Match {
             for (range, style) in highlight_ranges(
                 &whole_path.to_string_lossy(),
                 &path_match.positions,
-                gpui::HighlightStyle::color(Color::Accent.color(cx)),
+                gpui::HighlightStyle::color(Color::Accent.color(window, cx)),
             ) {
                 highlights.push((range.start + offset..range.end + offset, style))
             }
@@ -129,7 +144,7 @@ impl Match {
 
             if let Some(suffix) = &self.suffix {
                 text.push_str(suffix);
-                let entry = self.entry(project, cx);
+                let entry = self.entry(project, window, cx);
                 let color = if let Some(entry) = entry {
                     if entry.is_dir() {
                         Color::Accent
@@ -141,7 +156,7 @@ impl Match {
                 };
                 highlights.push((
                     offset..offset + suffix.as_bytes().len(),
-                    HighlightStyle::color(color.color(cx)),
+                    HighlightStyle::color(color.color(window, cx)),
                 ));
                 offset += suffix.as_bytes().len();
                 if entry.is_some_and(|e| e.is_dir()) {
@@ -151,35 +166,35 @@ impl Match {
                     text.push_str(dir_indicator);
                     highlights.push((
                         offset..offset + dir_indicator.bytes().len(),
-                        HighlightStyle::color(Color::Muted.color(cx)),
+                        HighlightStyle::color(Color::Muted.color(window, cx)),
                     ));
                 }
             } else {
                 text.push_str(dir_indicator);
                 highlights.push((
                     offset..offset + dir_indicator.bytes().len(),
-                    HighlightStyle::color(Color::Muted.color(cx)),
+                    HighlightStyle::color(Color::Muted.color(window, cx)),
                 ))
             }
         } else if let Some(suffix) = &self.suffix {
             text.push_str(suffix);
             let existing_prefix_len = self
-                .existing_prefix(project, cx)
+                .existing_prefix(project, window, cx)
                 .map(|prefix| prefix.to_string_lossy().as_bytes().len())
                 .unwrap_or(0);
 
             if existing_prefix_len > 0 {
                 highlights.push((
                     offset..offset + existing_prefix_len,
-                    HighlightStyle::color(Color::Accent.color(cx)),
+                    HighlightStyle::color(Color::Accent.color(window, cx)),
                 ));
             }
             highlights.push((
                 offset + existing_prefix_len..offset + suffix.as_bytes().len(),
-                HighlightStyle::color(if self.entry(project, cx).is_some() {
-                    Color::Conflict.color(cx)
+                HighlightStyle::color(if self.entry(project, window, cx).is_some() {
+                    Color::Conflict.color(window, cx)
                 } else {
-                    Color::Created.color(cx)
+                    Color::Created.color(window, cx)
                 }),
             ));
             offset += suffix.as_bytes().len();
@@ -187,12 +202,12 @@ impl Match {
                 text.push_str(dir_indicator);
                 highlights.push((
                     offset..offset + dir_indicator.bytes().len(),
-                    HighlightStyle::color(Color::Muted.color(cx)),
+                    HighlightStyle::color(Color::Muted.color(window, cx)),
                 ));
             }
         }
 
-        StyledText::new(text).with_highlights(&cx.text_style().clone(), highlights)
+        StyledText::new(text).with_highlights(&window.text_style(cx).clone(), highlights)
     }
 }
 
@@ -419,11 +434,11 @@ impl PickerDelegate for NewPathDelegate {
         )
     }
 
-    fn no_matches_text(&self, _cx: &mut WindowContext) -> SharedString {
+    fn no_matches_text(&self, _window: &mut Window, _cx: &mut AppContext) -> SharedString {
         "Type a path...".into()
     }
 
-    fn placeholder_text(&self, _cx: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, _window: &mut Window, _cx: &mut AppContext) -> Arc<str> {
         Arc::from("[directory/]filename.ext")
     }
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use call::{ActiveCall, ParticipantLocation, Room};
 use client::{proto::PeerId, User};
-use gpui::{actions, AppContext, Task, WindowContext};
+use gpui::{actions, AppContext, Task, Window};
 use gpui::{canvas, point, AnyElement, Hsla, IntoElement, MouseButton, Path, Styled};
 use rpc::proto::{self};
 use theme::ActiveTheme;
@@ -16,7 +16,7 @@ actions!(
     [ToggleScreenSharing, ToggleMute, ToggleDeafen, LeaveCall]
 );
 
-fn toggle_screen_sharing(_: &ToggleScreenSharing, cx: &mut WindowContext) {
+fn toggle_screen_sharing(_: &ToggleScreenSharing, window: &mut Window, cx: &mut AppContext) {
     let call = ActiveCall::global(cx).read(cx);
     if let Some(room) = call.room().cloned() {
         let toggle_screen_sharing = room.update(cx, |room, cx| {
@@ -36,7 +36,7 @@ fn toggle_screen_sharing(_: &ToggleScreenSharing, cx: &mut WindowContext) {
                 room.share_screen(cx)
             }
         });
-        toggle_screen_sharing.detach_and_prompt_err("Sharing Screen Failed", cx, |e, _| Some(format!("{:?}\n\nPlease check that you have given Zed permissions to record your screen in Settings.", e)));
+        toggle_screen_sharing.detach_and_prompt_err("Sharing Screen Failed", window, cx, |e, _| Some(format!("{:?}\n\nPlease check that you have given Zed permissions to record your screen in Settings.", e)));
     }
 }
 
@@ -69,7 +69,7 @@ fn toggle_deafen(_: &ToggleDeafen, cx: &mut AppContext) {
 fn render_color_ribbon(color: Hsla) -> impl Element {
     canvas(
         move |_, _| {},
-        move |bounds, _, cx| {
+        move |bounds, _, window, cx| {
             let height = bounds.size.height;
             let horizontal_offset = height;
             let vertical_offset = px(height.0 / 2.0);
@@ -84,7 +84,7 @@ fn render_color_ribbon(color: Hsla) -> impl Element {
                 bounds.top_right() + point(px(0.0), vertical_offset),
             );
             path.line_to(bounds.bottom_left());
-            cx.paint_path(path, color);
+            window.paint_path(path, color, cx);
         },
     )
     .h_1()
@@ -128,7 +128,9 @@ impl TitleBar {
 
                     this.children(current_user_face_pile.map(|face_pile| {
                         v_flex()
-                            .on_mouse_down(MouseButton::Left, |_, cx| cx.stop_propagation())
+                            .on_mouse_down(MouseButton::Left, |_, _window, cx| {
+                                cx.stop_propagation()
+                            })
                             .child(face_pile)
                             .child(render_color_ribbon(player_colors.local().cursor))
                     }))
@@ -179,7 +181,9 @@ impl TitleBar {
                                 })
                                 .tooltip({
                                     let login = collaborator.user.github_login.clone();
-                                    move |cx| Tooltip::text(format!("Follow {login}"), cx)
+                                    move |window, cx| {
+                                        Tooltip::text(format!("Follow {login}"), window, cx)
+                                    }
                                 }),
                         )
                     }))
@@ -235,9 +239,10 @@ impl TitleBar {
                                         AvatarAudioStatusIndicator::new(ui::AudioStatus::Muted)
                                             .tooltip({
                                                 let github_login = user.github_login.clone();
-                                                move |cx| {
+                                                move |window, cx| {
                                                     Tooltip::text(
                                                         format!("{} is muted", github_login),
+                                                        window,
                                                         cx,
                                                     )
                                                 }
@@ -310,13 +315,14 @@ impl TitleBar {
                     "toggle_sharing",
                     if is_shared { "Unshare" } else { "Share" },
                 )
-                .tooltip(move |cx| {
+                .tooltip(move |window, cx| {
                     Tooltip::text(
                         if is_shared {
                             "Stop sharing project with call participants"
                         } else {
                             "Share project with call participants"
                         },
+                        window,
                         cx,
                     )
                 })
@@ -341,9 +347,9 @@ impl TitleBar {
                 .child(
                     IconButton::new("leave-call", ui::IconName::Exit)
                         .style(ButtonStyle::Subtle)
-                        .tooltip(|cx| Tooltip::text("Leave call", cx))
+                        .tooltip(|window, cx| Tooltip::text("Leave call", window, cx))
                         .icon_size(IconSize::Small)
-                        .on_click(move |_, cx| {
+                        .on_click(move |_, _window, cx| {
                             ActiveCall::global(cx)
                                 .update(cx, |call, cx| call.hang_up(cx))
                                 .detach_and_log_err(cx);
@@ -362,27 +368,28 @@ impl TitleBar {
                         ui::IconName::Mic
                     },
                 )
-                .tooltip(move |cx| {
+                .tooltip(move |window, cx| {
                     if is_muted {
                         if is_deafened {
                             Tooltip::with_meta(
                                 "Unmute Microphone",
                                 None,
                                 "Audio will be unmuted",
+                                window,
                                 cx,
                             )
                         } else {
-                            Tooltip::text("Unmute Microphone", cx)
+                            Tooltip::text("Unmute Microphone", window, cx)
                         }
                     } else {
-                        Tooltip::text("Mute Microphone", cx)
+                        Tooltip::text("Mute Microphone", window, cx)
                     }
                 })
                 .style(ButtonStyle::Subtle)
                 .icon_size(IconSize::Small)
                 .toggle_state(is_muted)
                 .selected_style(ButtonStyle::Tinted(TintColor::Negative))
-                .on_click(move |_, cx| {
+                .on_click(move |_, _window, cx| {
                     toggle_mute(&Default::default(), cx);
                 })
                 .into_any_element(),
@@ -401,26 +408,32 @@ impl TitleBar {
                 .selected_style(ButtonStyle::Tinted(TintColor::Negative))
                 .icon_size(IconSize::Small)
                 .toggle_state(is_deafened)
-                .tooltip(move |cx| {
+                .tooltip(move |window, cx| {
                     if is_deafened {
                         let label = "Unmute Audio";
 
                         if !muted_by_user {
-                            Tooltip::with_meta(label, None, "Microphone will be unmuted", cx)
+                            Tooltip::with_meta(
+                                label,
+                                None,
+                                "Microphone will be unmuted",
+                                window,
+                                cx,
+                            )
                         } else {
-                            Tooltip::text(label, cx)
+                            Tooltip::text(label, window, cx)
                         }
                     } else {
                         let label = "Mute Audio";
 
                         if !muted_by_user {
-                            Tooltip::with_meta(label, None, "Microphone will be muted", cx)
+                            Tooltip::with_meta(label, None, "Microphone will be muted", window, cx)
                         } else {
-                            Tooltip::text(label, cx)
+                            Tooltip::text(label, window, cx)
                         }
                     }
                 })
-                .on_click(move |_, cx| toggle_deafen(&Default::default(), cx))
+                .on_click(move |_, _window, cx| toggle_deafen(&Default::default(), cx))
                 .into_any_element(),
             );
         }
@@ -432,17 +445,20 @@ impl TitleBar {
                     .icon_size(IconSize::Small)
                     .toggle_state(is_screen_sharing)
                     .selected_style(ButtonStyle::Tinted(TintColor::Accent))
-                    .tooltip(move |cx| {
+                    .tooltip(move |window, cx| {
                         Tooltip::text(
                             if is_screen_sharing {
                                 "Stop Sharing Screen"
                             } else {
                                 "Share Screen"
                             },
+                            window,
                             cx,
                         )
                     })
-                    .on_click(move |_, cx| toggle_screen_sharing(&Default::default(), cx))
+                    .on_click(move |_, window, cx| {
+                        toggle_screen_sharing(&Default::default(), window, cx)
+                    })
                     .into_any_element(),
             );
         }

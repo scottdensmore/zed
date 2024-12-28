@@ -13,7 +13,7 @@ use editor::{
 use gpui::{
     actions, AnyView, AppContext, ClipboardItem, Entity as _, EventEmitter, FocusableView, Model,
     Pixels, Point, Render, Subscription, Task, View, ViewContext, VisualContext as _, WeakView,
-    WindowContext,
+    Window,
 };
 use project::Project;
 use rpc::proto::ChannelVisibility;
@@ -53,7 +53,8 @@ impl ChannelView {
         channel_id: ChannelId,
         link_position: Option<String>,
         workspace: View<Workspace>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<Result<View<Self>>> {
         let pane = workspace.read(cx).active_pane().clone();
         let channel_view = Self::open_in_pane(
@@ -61,9 +62,10 @@ impl ChannelView {
             link_position,
             pane.clone(),
             workspace.clone(),
+            window,
             cx,
         );
-        cx.spawn(|mut cx| async move {
+        window.spawn(cx, |mut cx| async move {
             let channel_view = channel_view.await?;
             pane.update(&mut cx, |pane, cx| {
                 telemetry::event!(
@@ -85,10 +87,11 @@ impl ChannelView {
         link_position: Option<String>,
         pane: View<Pane>,
         workspace: View<Workspace>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<Result<View<Self>>> {
-        let channel_view = Self::load(channel_id, workspace, cx);
-        cx.spawn(|mut cx| async move {
+        let channel_view = Self::load(channel_id, workspace, window, cx);
+        window.spawn(cx, |mut cx| async move {
             let channel_view = channel_view.await?;
 
             pane.update(&mut cx, |pane, cx| {
@@ -135,7 +138,8 @@ impl ChannelView {
     pub fn load(
         channel_id: ChannelId,
         workspace: View<Workspace>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<Result<View<Self>>> {
         let weak_workspace = workspace.downgrade();
         let workspace = workspace.read(cx);
@@ -146,7 +150,7 @@ impl ChannelView {
         let channel_buffer =
             channel_store.update(cx, |store, cx| store.open_channel_buffer(channel_id, cx));
 
-        cx.spawn(|mut cx| async move {
+        window.spawn(cx, |mut cx| async move {
             let channel_buffer = channel_buffer.await?;
             let markdown = markdown.await.log_err();
 
@@ -186,7 +190,7 @@ impl ChannelView {
             editor.set_custom_context_menu(move |_, position, cx| {
                 let this = this.clone();
                 Some(ui::ContextMenu::build(cx, move |menu, _| {
-                    menu.entry("Copy link to section", None, move |cx| {
+                    menu.entry("Copy link to section", None, move |_window, cx| {
                         this.update(cx, |this, cx| this.copy_link_for_position(position, cx))
                             .ok();
                     })
@@ -389,7 +393,7 @@ impl Item for ChannelView {
         }
     }
 
-    fn tab_icon(&self, cx: &WindowContext) -> Option<Icon> {
+    fn tab_icon(&self, _window: &Window, cx: &AppContext) -> Option<Icon> {
         let channel = self.channel(cx)?;
         let icon = match channel.visibility {
             ChannelVisibility::Public => IconName::Public,
@@ -399,7 +403,12 @@ impl Item for ChannelView {
         Some(Icon::new(icon))
     }
 
-    fn tab_content(&self, params: TabContentParams, cx: &WindowContext) -> gpui::AnyElement {
+    fn tab_content(
+        &self,
+        params: TabContentParams,
+        _window: &Window,
+        cx: &AppContext,
+    ) -> gpui::AnyElement {
         let (channel_name, status) = if let Some(channel) = self.channel(cx) {
             let status = match (
                 self.channel_buffer.read(cx).buffer().read(cx).read_only(),
@@ -492,7 +501,7 @@ impl FollowableItem for ChannelView {
         self.remote_id
     }
 
-    fn to_state_proto(&self, cx: &WindowContext) -> Option<proto::view::Variant> {
+    fn to_state_proto(&self, window: &Window, cx: &AppContext) -> Option<proto::view::Variant> {
         let channel_buffer = self.channel_buffer.read(cx);
         if !channel_buffer.is_connected() {
             return None;
@@ -502,7 +511,7 @@ impl FollowableItem for ChannelView {
             proto::view::ChannelView {
                 channel_id: channel_buffer.channel_id.0,
                 editor: if let Some(proto::view::Variant::Editor(proto)) =
-                    self.editor.read(cx).to_state_proto(cx)
+                    self.editor.read(cx).to_state_proto(window, cx)
                 {
                     Some(proto)
                 } else {
@@ -516,7 +525,8 @@ impl FollowableItem for ChannelView {
         workspace: View<workspace::Workspace>,
         remote_id: workspace::ViewId,
         state: &mut Option<proto::view::Variant>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Option<gpui::Task<anyhow::Result<View<Self>>>> {
         let Some(proto::view::Variant::ChannelView(_)) = state else {
             return None;
@@ -525,9 +535,9 @@ impl FollowableItem for ChannelView {
             unreachable!()
         };
 
-        let open = ChannelView::load(ChannelId(state.channel_id), workspace, cx);
+        let open = ChannelView::load(ChannelId(state.channel_id), workspace, window, cx);
 
-        Some(cx.spawn(|mut cx| async move {
+        Some(window.spawn(cx, |mut cx| async move {
             let this = open.await?;
 
             let task = this.update(&mut cx, |this, cx| {
@@ -565,11 +575,12 @@ impl FollowableItem for ChannelView {
         &self,
         event: &EditorEvent,
         update: &mut Option<proto::update_view::Variant>,
-        cx: &WindowContext,
+        window: &Window,
+        cx: &AppContext,
     ) -> bool {
         self.editor
             .read(cx)
-            .add_event_to_update_proto(event, update, cx)
+            .add_event_to_update_proto(event, update, window, cx)
     }
 
     fn apply_update_proto(
@@ -589,7 +600,7 @@ impl FollowableItem for ChannelView {
         })
     }
 
-    fn is_project_item(&self, _cx: &WindowContext) -> bool {
+    fn is_project_item(&self, _window: &Window, _cx: &AppContext) -> bool {
         false
     }
 
@@ -597,7 +608,7 @@ impl FollowableItem for ChannelView {
         Editor::to_follow_event(event)
     }
 
-    fn dedup(&self, existing: &Self, cx: &WindowContext) -> Option<Dedup> {
+    fn dedup(&self, existing: &Self, _window: &Window, cx: &AppContext) -> Option<Dedup> {
         let existing = existing.channel_buffer.read(cx);
         if self.channel_buffer.read(cx).channel_id == existing.channel_id {
             if existing.is_connected() {

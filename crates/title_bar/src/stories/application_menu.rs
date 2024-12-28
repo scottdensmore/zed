@@ -10,9 +10,9 @@ pub struct ApplicationMenuStory {
 }
 
 impl ApplicationMenuStory {
-    pub fn new(cx: &mut WindowContext) -> Self {
+    pub fn new(window: &mut Window, cx: &mut AppContext) -> Self {
         Self {
-            menu: cx.new_view(ApplicationMenu::new),
+            menu: window.new_view(cx, ApplicationMenu::new),
         }
     }
 }

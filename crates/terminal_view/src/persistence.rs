@@ -6,7 +6,7 @@ use gpui::{AsyncWindowContext, Axis, Model, Task, View, WeakView};
 use project::{terminals::TerminalKind, Project};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use ui::{Pixels, ViewContext, VisualContext as _, WindowContext};
+use ui::{AppContext, Pixels, ViewContext, VisualContext as _, Window};
 use util::ResultExt as _;
 
 use db::{define_connection, query, sqlez::statement::Statement, sqlez_macros::sql};
@@ -24,15 +24,17 @@ use crate::{
 pub(crate) fn serialize_pane_group(
     pane_group: &PaneGroup,
     active_pane: &View<Pane>,
-    cx: &WindowContext,
+    window: &Window,
+    cx: &AppContext,
 ) -> SerializedPaneGroup {
-    build_serialized_pane_group(&pane_group.root, active_pane, cx)
+    build_serialized_pane_group(&pane_group.root, active_pane, window, cx)
 }
 
 fn build_serialized_pane_group(
     pane_group: &Member,
     active_pane: &View<Pane>,
-    cx: &WindowContext,
+    window: &Window,
+    cx: &AppContext,
 ) -> SerializedPaneGroup {
     match pane_group {
         Member::Axis(PaneAxis {
@@ -44,17 +46,25 @@ fn build_serialized_pane_group(
             axis: SerializedAxis(*axis),
             children: members
                 .iter()
-                .map(|member| build_serialized_pane_group(member, active_pane, cx))
+                .map(|member| build_serialized_pane_group(member, active_pane, window, cx))
                 .collect::<Vec<_>>(),
             flexes: Some(flexes.lock().clone()),
         },
-        Member::Pane(pane_handle) => {
-            SerializedPaneGroup::Pane(serialize_pane(pane_handle, pane_handle == active_pane, cx))
-        }
+        Member::Pane(pane_handle) => SerializedPaneGroup::Pane(serialize_pane(
+            pane_handle,
+            pane_handle == active_pane,
+            window,
+            cx,
+        )),
     }
 }
 
-fn serialize_pane(pane: &View<Pane>, active: bool, cx: &WindowContext) -> SerializedPane {
+fn serialize_pane(
+    pane: &View<Pane>,
+    active: bool,
+    _window: &Window,
+    cx: &AppContext,
+) -> SerializedPane {
     let mut items_to_serialize = HashSet::default();
     let pane = pane.read(cx);
     let children = pane
@@ -87,9 +97,10 @@ pub(crate) fn deserialize_terminal_panel(
     project: Model<Project>,
     database_id: WorkspaceId,
     serialized_panel: SerializedTerminalPanel,
-    cx: &mut WindowContext,
+    window: &mut Window,
+    cx: &mut AppContext,
 ) -> Task<anyhow::Result<View<TerminalPanel>>> {
-    cx.spawn(move |mut cx| async move {
+    window.spawn(cx, move |mut cx| async move {
         let terminal_panel = workspace.update(&mut cx, |workspace, cx| {
             cx.new_view(|cx| {
                 let mut panel = TerminalPanel::new(workspace, cx);
@@ -279,12 +290,13 @@ async fn deserialize_terminal_views(
     let mut deserialized_items = item_ids
         .iter()
         .map(|item_id| {
-            cx.update(|cx| {
+            cx.update(|window, cx| {
                 TerminalView::deserialize(
                     project.clone(),
                     workspace.clone(),
                     workspace_id,
                     *item_id,
+                    window,
                     cx,
                 )
             })

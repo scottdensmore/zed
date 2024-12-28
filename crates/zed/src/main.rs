@@ -102,8 +102,8 @@ fn files_not_createad_on_launch(errors: HashMap<io::ErrorKind, Vec<&Path>>) {
 
     eprintln!("{message}: {error_details}");
     App::new().run(move |cx| {
-        if let Ok(window) = cx.open_window(gpui::WindowOptions::default(), |cx| {
-            cx.new_view(|_| gpui::Empty)
+        if let Ok(window) = cx.open_window(gpui::WindowOptions::default(), |window, cx| {
+            window.new_view(cx, |_| gpui::Empty)
         }) {
             window
                 .update(cx, |_, cx| {
@@ -116,7 +116,7 @@ fn files_not_createad_on_launch(errors: HashMap<io::ErrorKind, Vec<&Path>>) {
 
                     cx.spawn(|_, mut cx| async move {
                         response.await?;
-                        cx.update(|cx| cx.quit())
+                        cx.update(|_window, cx| cx.quit())
                     })
                     .detach_and_log_err(cx);
                 })
@@ -518,8 +518,8 @@ fn main() {
                 for &mut window in cx.windows().iter_mut() {
                     let background_appearance = cx.theme().window_background_appearance();
                     window
-                        .update(cx, |_, cx| {
-                            cx.set_background_appearance(background_appearance)
+                        .update(cx, |_, window, cx| {
+                            window.set_background_appearance(background_appearance, cx)
                         })
                         .ok();
                 }
@@ -747,7 +747,7 @@ fn handle_open_request(request: OpenRequest, app_state: Arc<AppState>, cx: &mut 
 
                 let mut promises = Vec::new();
                 for (channel_id, heading) in request.open_channel_notes {
-                    promises.push(cx.update_window(workspace_window.into(), |_, cx| {
+                    promises.push(cx.update_window(workspace_window.into(), |_, _window, cx| {
                         ChannelView::open(
                             client::ChannelId(channel_id),
                             heading,

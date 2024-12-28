@@ -24,7 +24,7 @@ use settings::{Settings, SettingsSources};
 use theme::ThemeSettings;
 use ui::{
     prelude::*, ActiveTheme, Color, Icon, IconName, IconSize, InteractiveElement, IntoElement,
-    Label, LabelCommon, Styled, ViewContext, VisualContext, WindowContext,
+    Label, LabelCommon, Styled, ViewContext, VisualContext, Window,
 };
 use workspace::{AppState, ModalView, Workspace};
 
@@ -226,6 +226,7 @@ impl SshPrompt {
 
 impl Render for SshPrompt {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+        // REFACTOR ERROR Unexpected parameter parents: let_declaration block
         let cx = cx.window_context();
 
         v_flex()
@@ -233,7 +234,7 @@ impl Render for SshPrompt {
             .py_2()
             .px_3()
             .size_full()
-            .text_buffer(cx)
+            .text_buffer(window, cx)
             .when_some(self.status_message.clone(), |el, status_message| {
                 el.child(
                     h_flex()
@@ -309,7 +310,7 @@ pub(crate) struct SshConnectionHeader {
 }
 
 impl RenderOnce for SshConnectionHeader {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut AppContext) -> impl IntoElement {
         let theme = cx.theme();
 
         let mut header_color = theme.colors().text;
@@ -322,9 +323,9 @@ impl RenderOnce for SshConnectionHeader {
         };
 
         h_flex()
-            .px(DynamicSpacing::Base12.rems(cx))
-            .pt(DynamicSpacing::Base08.rems(cx))
-            .pb(DynamicSpacing::Base04.rems(cx))
+            .px(DynamicSpacing::Base12.rems(window, cx))
+            .pt(DynamicSpacing::Base08.rems(window, cx))
+            .pb(DynamicSpacing::Base04.rems(window, cx))
             .rounded_t_md()
             .w_full()
             .gap_1p5()
@@ -430,7 +431,7 @@ impl remote::SshClientDelegate for SshClientDelegate {
             tx.send(Ok(password)).ok();
         } else {
             self.window
-                .update(cx, |_, cx| {
+                .update(cx, |_, _window, cx| {
                     self.ui.update(cx, |modal, cx| {
                         modal.set_prompt(prompt, tx, cx);
                     })
@@ -498,7 +499,7 @@ impl remote::SshClientDelegate for SshClientDelegate {
 impl SshClientDelegate {
     fn update_status(&self, status: Option<&str>, cx: &mut AsyncAppContext) {
         self.window
-            .update(cx, |_, cx| {
+            .update(cx, |_, _window, cx| {
                 self.ui.update(cx, |modal, cx| {
                     modal.set_status(status.map(|s| s.to_string()), cx);
                 })
@@ -515,9 +516,10 @@ pub fn connect_over_ssh(
     unique_identifier: ConnectionIdentifier,
     connection_options: SshConnectionOptions,
     ui: View<SshPrompt>,
-    cx: &mut WindowContext,
+    window: &mut Window,
+    cx: &mut AppContext,
 ) -> Task<Result<Option<Model<SshRemoteClient>>>> {
-    let window = cx.window_handle();
+    let window = window.window_handle(cx);
     let known_password = connection_options.password.clone();
     let (tx, rx) = oneshot::channel();
     ui.update(cx, |ui, _cx| ui.set_cancellation_tx(tx));
@@ -546,7 +548,7 @@ pub async fn open_ssh_project(
         window
     } else {
         let options = cx.update(|cx| (app_state.build_window_options)(None, cx))?;
-        cx.open_window(options, |cx| {
+        cx.open_window(options, |window, cx| {
             let project = project::Project::local(
                 app_state.client.clone(),
                 app_state.node_runtime.clone(),
@@ -556,7 +558,9 @@ pub async fn open_ssh_project(
                 None,
                 cx,
             );
-            cx.new_view(|cx| Workspace::new(None, project, app_state.clone(), cx))
+            window.new_view(cx, |cx| {
+                Workspace::new(None, project, app_state.clone(), cx)
+            })
         })?
     };
 

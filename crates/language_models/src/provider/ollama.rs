@@ -211,9 +211,11 @@ impl LanguageModelProvider for OllamaLanguageModelProvider {
         self.state.update(cx, |state, cx| state.authenticate(cx))
     }
 
-    fn configuration_view(&self, cx: &mut WindowContext) -> AnyView {
+    fn configuration_view(&self, window: &mut Window, cx: &mut AppContext) -> AnyView {
         let state = self.state.clone();
-        cx.new_view(|cx| ConfigurationView::new(state, cx)).into()
+        window
+            .new_view(cx, |cx| ConfigurationView::new(state, cx))
+            .into()
     }
 
     fn reset_credentials(&self, cx: &mut AppContext) -> Task<Result<()>> {
@@ -436,7 +438,7 @@ impl ConfigurationView {
         }
     }
 
-    fn retry_connection(&self, cx: &mut WindowContext) {
+    fn retry_connection(&self, _window: &mut Window, cx: &mut AppContext) {
         self.state
             .update(cx, |state, cx| state.fetch_models(cx))
             .detach_and_log_err(cx);
@@ -498,7 +500,9 @@ impl Render for ConfigurationView {
                                                 .icon(IconName::ExternalLink)
                                                 .icon_size(IconSize::XSmall)
                                                 .icon_color(Color::Muted)
-                                                .on_click(move |_, cx| cx.open_url(OLLAMA_SITE))
+                                                .on_click(move |_, _window, cx| {
+                                                    cx.open_url(OLLAMA_SITE)
+                                                })
                                                 .into_any_element(),
                                         )
                                     } else {
@@ -511,7 +515,9 @@ impl Render for ConfigurationView {
                                             .icon(IconName::ExternalLink)
                                             .icon_size(IconSize::XSmall)
                                             .icon_color(Color::Muted)
-                                            .on_click(move |_, cx| cx.open_url(OLLAMA_DOWNLOAD_URL))
+                                            .on_click(move |_, _window, cx| {
+                                                cx.open_url(OLLAMA_DOWNLOAD_URL)
+                                            })
                                             .into_any_element(),
                                         )
                                     }
@@ -522,7 +528,9 @@ impl Render for ConfigurationView {
                                         .icon(IconName::ExternalLink)
                                         .icon_size(IconSize::XSmall)
                                         .icon_color(Color::Muted)
-                                        .on_click(move |_, cx| cx.open_url(OLLAMA_LIBRARY_URL)),
+                                        .on_click(move |_, _window, cx| {
+                                            cx.open_url(OLLAMA_LIBRARY_URL)
+                                        }),
                                 ),
                         )
                         .child(if is_authenticated {

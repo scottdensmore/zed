@@ -55,16 +55,17 @@ impl Render for ContextStrip {
             .gap_1()
             .child(
                 PopoverMenu::new("context-picker")
-                    .menu(move |_cx| Some(context_picker.clone()))
+                    .menu(move |_window, _cx| Some(context_picker.clone()))
                     .trigger(
                         IconButton::new("add-context", IconName::Plus)
                             .icon_size(IconSize::Small)
                             .style(ui::ButtonStyle::Filled)
-                            .tooltip(move |cx| {
+                            .tooltip(move |window, cx| {
                                 Tooltip::for_action_in(
                                     "Add Context",
                                     &ToggleContextPicker,
                                     &focus_handle,
+                                    window,
                                     cx,
                                 )
                             }),
@@ -117,7 +118,9 @@ impl Render for ContextStrip {
                     parent.child(
                         IconButton::new("remove-all-context", IconName::Eraser)
                             .icon_size(IconSize::Small)
-                            .tooltip(move |cx| Tooltip::text("Remove All Context", cx))
+                            .tooltip(move |window, cx| {
+                                Tooltip::text("Remove All Context", window, cx)
+                            })
                             .on_click({
                                 let context_store = self.context_store.clone();
                                 cx.listener(move |_this, _event, cx| {

@@ -807,13 +807,14 @@ impl GitPanel {
                     .gap_2()
                     .child(
                         IconButton::new("discard-changes", IconName::Undo)
-                            .tooltip(move |cx| {
+                            .tooltip(move |window, cx| {
                                 let focus_handle = focus_handle.clone();
 
                                 Tooltip::for_action_in(
                                     "Discard all changes",
                                     &DiscardAll,
                                     &focus_handle,
+                                    window,
                                     cx,
                                 )
                             })
@@ -838,12 +839,13 @@ impl GitPanel {
 
         let commit_staged_button = self
             .panel_button("commit-staged-changes", "Commit")
-            .tooltip(move |cx| {
+            .tooltip(move |window, cx| {
                 let focus_handle = focus_handle_1.clone();
                 Tooltip::for_action_in(
                     "Commit all staged changes",
                     &CommitStagedChanges,
                     &focus_handle,
+                    window,
                     cx,
                 )
             })
@@ -853,12 +855,13 @@ impl GitPanel {
 
         let commit_all_button = self
             .panel_button("commit-all-changes", "Commit All")
-            .tooltip(move |cx| {
+            .tooltip(move |window, cx| {
                 let focus_handle = focus_handle_2.clone();
                 Tooltip::for_action_in(
                     "Commit all changes, including unstaged changes",
                     &CommitAllChanges,
                     &focus_handle,
+                    window,
                     cx,
                 )
             })
@@ -920,10 +923,10 @@ impl GitPanel {
                     cx.notify();
                     cx.stop_propagation()
                 }))
-                .on_hover(|_, cx| {
+                .on_hover(|_, _window, cx| {
                     cx.stop_propagation();
                 })
-                .on_any_mouse_down(|_, cx| {
+                .on_any_mouse_down(|_, _window, cx| {
                     cx.stop_propagation();
                 })
                 .on_mouse_up(
@@ -1022,7 +1025,7 @@ impl GitPanel {
                 ListItem::new(("label", id))
                     .toggle_state(selected)
                     .child(h_flex().gap_1p5().child(details.display_name.clone()))
-                    .on_click(move |e, cx| {
+                    .on_click(move |e, _window, cx| {
                         handle
                             .update(cx, |git_panel, cx| {
                                 git_panel.selected_item = Some(details.index);
@@ -1199,6 +1202,7 @@ impl Panel for GitPanel {
         "GitPanel"
     }
 
+    // REFACTOR ERROR Unexpected type &gpui::WindowContext
     fn position(&self, cx: &gpui::WindowContext) -> DockPosition {
         GitPanelSettings::get_global(cx).dock
     }
@@ -1215,6 +1219,7 @@ impl Panel for GitPanel {
         );
     }
 
+    // REFACTOR ERROR Unexpected type &gpui::WindowContext
     fn size(&self, cx: &gpui::WindowContext) -> Pixels {
         self.width
             .unwrap_or_else(|| GitPanelSettings::get_global(cx).default_width)
@@ -1226,11 +1231,11 @@ impl Panel for GitPanel {
         cx.notify();
     }
 
-    fn icon(&self, cx: &WindowContext) -> Option<ui::IconName> {
+    fn icon(&self, _window: &Window, cx: &AppContext) -> Option<ui::IconName> {
         Some(ui::IconName::GitBranch).filter(|_| GitPanelSettings::get_global(cx).button)
     }
 
-    fn icon_tooltip(&self, _cx: &WindowContext) -> Option<&'static str> {
+    fn icon_tooltip(&self, _window: &Window, _cx: &AppContext) -> Option<&'static str> {
         Some("Git Panel")
     }
 
@@ -1239,8 +1244,8 @@ impl Panel for GitPanel {
     }
 }
 
-fn diff_display_editor(cx: &mut WindowContext) -> View<Editor> {
-    cx.new_view(|cx| {
+fn diff_display_editor(window: &mut Window, cx: &mut AppContext) -> View<Editor> {
+    window.new_view(cx, |cx| {
         let multi_buffer = cx.new_model(|_| {
             MultiBuffer::new(language::Capability::ReadWrite).with_title("Project diff".to_string())
         });

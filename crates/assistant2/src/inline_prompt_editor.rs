@@ -18,7 +18,7 @@ use fs::Fs;
 use gpui::{
     anchored, deferred, point, AnyElement, AppContext, ClickEvent, CursorStyle, EventEmitter,
     FocusHandle, FocusableView, FontWeight, Model, Subscription, TextStyle, View, ViewContext,
-    WeakModel, WeakView, WindowContext,
+    WeakModel, WeakView, Window,
 };
 use language_model::{LanguageModel, LanguageModelRegistry};
 use language_model_selector::LanguageModelSelector;
@@ -154,8 +154,8 @@ impl<T: 'static> Render for PromptEditor<T> {
                                     el.child(
                                         div()
                                             .id("error")
-                                            .tooltip(move |cx| {
-                                                Tooltip::text(error_message.clone(), cx)
+                                            .tooltip(move |window, cx| {
+                                                Tooltip::text(error_message.clone(), window, cx)
                                             })
                                             .child(
                                                 Icon::new(IconName::XCircle)
@@ -237,7 +237,7 @@ impl<T: 'static> PromptEditor<T> {
         self.subscribe_to_editor(cx);
     }
 
-    pub fn placeholder_text(mode: &PromptEditorMode, cx: &WindowContext) -> String {
+    pub fn placeholder_text(mode: &PromptEditorMode, window: &Window, cx: &AppContext) -> String {
         let action = match mode {
             PromptEditorMode::Buffer { codegen, .. } => {
                 if codegen.read(cx).is_insertion {
@@ -249,7 +249,7 @@ impl<T: 'static> PromptEditor<T> {
             PromptEditorMode::Terminal { .. } => "Generate",
         };
 
-        let assistant_panel_keybinding = ui::text_for_action(&crate::ToggleFocus, cx)
+        let assistant_panel_keybinding = ui::text_for_action(&crate::ToggleFocus, window, cx)
             .map(|keybinding| format!("{keybinding} to chat ― "))
             .unwrap_or_default();
 
@@ -420,7 +420,7 @@ impl<T: 'static> PromptEditor<T> {
             CodegenStatus::Pending => vec![IconButton::new("stop", IconName::Stop)
                 .icon_color(Color::Error)
                 .shape(IconButtonShape::Square)
-                .tooltip(move |cx| {
+                .tooltip(move |_window, cx| {
                     Tooltip::with_meta(
                         mode.tooltip_interrupt(),
                         Some(&menu::Cancel),
@@ -436,7 +436,7 @@ impl<T: 'static> PromptEditor<T> {
                     vec![IconButton::new("restart", IconName::RotateCw)
                         .icon_color(Color::Info)
                         .shape(IconButtonShape::Square)
-                        .tooltip(move |cx| {
+                        .tooltip(move |_window, cx| {
                             Tooltip::with_meta(
                                 mode.tooltip_restart(),
                                 Some(&menu::Confirm),
@@ -452,8 +452,8 @@ impl<T: 'static> PromptEditor<T> {
                     let accept = IconButton::new("accept", IconName::Check)
                         .icon_color(Color::Info)
                         .shape(IconButtonShape::Square)
-                        .tooltip(move |cx| {
-                            Tooltip::for_action(mode.tooltip_accept(), &menu::Confirm, cx)
+                        .tooltip(move |window, cx| {
+                            Tooltip::for_action(mode.tooltip_accept(), &menu::Confirm, window, cx)
                         })
                         .on_click(cx.listener(|_, _, cx| {
                             cx.emit(PromptEditorEvent::ConfirmRequested { execute: false });
@@ -466,7 +466,7 @@ impl<T: 'static> PromptEditor<T> {
                             IconButton::new("confirm", IconName::Play)
                                 .icon_color(Color::Info)
                                 .shape(IconButtonShape::Square)
-                                .tooltip(|cx| {
+                                .tooltip(|_window, cx| {
                                     Tooltip::for_action(
                                         "Execute Generated Command",
                                         &menu::SecondaryConfirm,
@@ -511,7 +511,7 @@ impl<T: 'static> PromptEditor<T> {
         IconButton::new("cancel", IconName::Close)
             .icon_color(Color::Muted)
             .shape(IconButtonShape::Square)
-            .tooltip(|cx| Tooltip::text("Close Assistant", cx))
+            .tooltip(|window, cx| Tooltip::text("Close Assistant", window, cx))
             .on_click(cx.listener(|_, _, cx| cx.emit(PromptEditorEvent::CancelRequested)))
             .into_any_element()
     }
@@ -556,21 +556,21 @@ impl<T: 'static> PromptEditor<T> {
                     .shape(IconButtonShape::Square)
                     .tooltip({
                         let focus_handle = self.editor.focus_handle(cx);
-                        move |cx| {
-                            cx.new_view(|cx| {
-                                let mut tooltip = Tooltip::new("Previous Alternative").key_binding(
-                                    KeyBinding::for_action_in(
-                                        &CyclePreviousInlineAssist,
-                                        &focus_handle,
-                                        cx,
-                                    ),
-                                );
-                                if !disabled && current_index != 0 {
-                                    tooltip = tooltip.meta(prev_model_name.clone());
-                                }
-                                tooltip
-                            })
-                            .into()
+                        move |window, cx| {
+                            window
+                                .new_view(cx, |cx| {
+                                    let mut tooltip = Tooltip::new("Previous Alternative")
+                                        .key_binding(KeyBinding::for_action_in(
+                                            &CyclePreviousInlineAssist,
+                                            &focus_handle,
+                                            cx,
+                                        ));
+                                    if !disabled && current_index != 0 {
+                                        tooltip = tooltip.meta(prev_model_name.clone());
+                                    }
+                                    tooltip
+                                })
+                                .into()
                         }
                     })
                     .on_click(cx.listener(|this, _, cx| {
@@ -597,21 +597,22 @@ impl<T: 'static> PromptEditor<T> {
                     .shape(IconButtonShape::Square)
                     .tooltip({
                         let focus_handle = self.editor.focus_handle(cx);
-                        move |cx| {
-                            cx.new_view(|cx| {
-                                let mut tooltip = Tooltip::new("Next Alternative").key_binding(
-                                    KeyBinding::for_action_in(
-                                        &CycleNextInlineAssist,
-                                        &focus_handle,
-                                        cx,
-                                    ),
-                                );
-                                if !disabled && current_index != total_models - 1 {
-                                    tooltip = tooltip.meta(next_model_name.clone());
-                                }
-                                tooltip
-                            })
-                            .into()
+                        move |window, cx| {
+                            window
+                                .new_view(cx, |cx| {
+                                    let mut tooltip = Tooltip::new("Next Alternative").key_binding(
+                                        KeyBinding::for_action_in(
+                                            &CycleNextInlineAssist,
+                                            &focus_handle,
+                                            cx,
+                                        ),
+                                    );
+                                    if !disabled && current_index != total_models - 1 {
+                                        tooltip = tooltip.meta(next_model_name.clone());
+                                    }
+                                    tooltip
+                                })
+                                .into()
                         }
                     })
                     .on_click(
@@ -645,7 +646,7 @@ impl<T: 'static> PromptEditor<T> {
                             } else {
                                 ui::ToggleState::Unselected
                             },
-                            |selection, cx| {
+                            |selection, _window, cx| {
                                 let is_dismissed = match selection {
                                     ui::ToggleState::Unselected => false,
                                     ui::ToggleState::Indeterminate => return,
@@ -664,10 +665,11 @@ impl<T: 'static> PromptEditor<T> {
                                         .on_click(cx.listener(Self::toggle_rate_limit_notice)),
                                 )
                                 .child(Button::new("more-info", "More Info").on_click(
-                                    |_event, cx| {
-                                        cx.dispatch_action(Box::new(
-                                            zed_actions::OpenAccountSettings,
-                                        ))
+                                    |_event, window, cx| {
+                                        window.dispatch_action(
+                                            Box::new(zed_actions::OpenAccountSettings),
+                                            cx,
+                                        )
                                     },
                                 )),
                         ),

@@ -101,7 +101,7 @@ async fn test_host_disconnect(
     assert!(cx_b.update_view(&editor_b, |editor, cx| editor.is_focused(cx)));
     editor_b.update(cx_b, |editor, cx| editor.insert("X", cx));
 
-    cx_b.update(|cx| {
+    cx_b.update(|_window, cx| {
         assert!(workspace_b_view.read(cx).is_edited());
     });
 

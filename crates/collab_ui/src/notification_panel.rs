@@ -9,8 +9,7 @@ use gpui::{
     actions, div, img, list, px, AnyElement, AppContext, AsyncWindowContext, CursorStyle,
     DismissEvent, Element, EventEmitter, FocusHandle, FocusableView, InteractiveElement,
     IntoElement, ListAlignment, ListScrollEvent, ListState, Model, ParentElement, Render,
-    StatefulInteractiveElement, Styled, Task, View, ViewContext, VisualContext, WeakView,
-    WindowContext,
+    StatefulInteractiveElement, Styled, Task, View, ViewContext, VisualContext, WeakView, Window,
 };
 use notifications::{NotificationEntry, NotificationEvent, NotificationStore};
 use project::Fs;
@@ -109,7 +108,7 @@ impl NotificationPanel {
 
             let view = cx.view().downgrade();
             let notification_list =
-                ListState::new(0, ListAlignment::Top, px(1000.), move |ix, cx| {
+                ListState::new(0, ListAlignment::Top, px(1000.), move |ix, _window, cx| {
                     view.upgrade()
                         .and_then(|view| {
                             view.update(cx, |this, cx| this.render_notification(ix, cx))
@@ -288,8 +287,8 @@ impl NotificationPanel {
                                                 .rounded_md()
                                         })
                                         .child(Label::new(relative_timestamp).color(Color::Muted))
-                                        .tooltip(move |cx| {
-                                            Tooltip::text(absolute_timestamp.clone(), cx)
+                                        .tooltip(move |window, cx| {
+                                            Tooltip::text(absolute_timestamp.clone(), window, cx)
                                         }),
                                 )
                                 .children(if let Some(is_accepted) = response {
@@ -308,7 +307,7 @@ impl NotificationPanel {
                                             .child(Button::new("decline", "Decline").on_click({
                                                 let notification = notification.clone();
                                                 let view = cx.view().clone();
-                                                move |_, cx| {
+                                                move |_, _window, cx| {
                                                     view.update(cx, |this, cx| {
                                                         this.respond_to_notification(
                                                             notification.clone(),
@@ -321,7 +320,7 @@ impl NotificationPanel {
                                             .child(Button::new("accept", "Accept").on_click({
                                                 let notification = notification.clone();
                                                 let view = cx.view().clone();
-                                                move |_, cx| {
+                                                move |_, _window, cx| {
                                                     view.update(cx, |this, cx| {
                                                         this.respond_to_notification(
                                                             notification.clone(),
@@ -451,7 +450,7 @@ impl NotificationPanel {
         } = notification.clone()
         {
             if let Some(workspace) = self.workspace.upgrade() {
-                cx.window_context().defer(move |cx| {
+                cx.window_context().defer(move |_window, cx| {
                     workspace.update(cx, |workspace, cx| {
                         if let Some(panel) = workspace.focus_panel::<ChatPanel>(cx) {
                             panel.update(cx, |panel, cx| {
@@ -611,15 +610,16 @@ impl Render for NotificationPanel {
                                     .full_width()
                                     .on_click({
                                         let client = self.client.clone();
-                                        move |_, cx| {
+                                        move |_, window, cx| {
                                             let client = client.clone();
-                                            cx.spawn(move |cx| async move {
-                                                client
-                                                    .authenticate_and_connect(true, &cx)
-                                                    .log_err()
-                                                    .await;
-                                            })
-                                            .detach()
+                                            window
+                                                .spawn(cx, move |cx| async move {
+                                                    client
+                                                        .authenticate_and_connect(true, &cx)
+                                                        .log_err()
+                                                        .await;
+                                                })
+                                                .detach()
                                         }
                                     }),
                             )
@@ -662,6 +662,7 @@ impl Panel for NotificationPanel {
         "NotificationPanel"
     }
 
+    // REFACTOR ERROR Unexpected type &gpui::WindowContext
     fn position(&self, cx: &gpui::WindowContext) -> DockPosition {
         NotificationPanelSettings::get_global(cx).dock
     }
@@ -678,6 +679,7 @@ impl Panel for NotificationPanel {
         );
     }
 
+    // REFACTOR ERROR Unexpected type &gpui::WindowContext
     fn size(&self, cx: &gpui::WindowContext) -> Pixels {
         self.width
             .unwrap_or_else(|| NotificationPanelSettings::get_global(cx).default_width)
@@ -702,6 +704,7 @@ impl Panel for NotificationPanel {
         }
     }
 
+    // REFACTOR ERROR Unexpected type &gpui::WindowContext
     fn icon(&self, cx: &gpui::WindowContext) -> Option<IconName> {
         let show_button = NotificationPanelSettings::get_global(cx).button;
         if !show_button {
@@ -715,11 +718,11 @@ impl Panel for NotificationPanel {
         Some(IconName::BellDot)
     }
 
-    fn icon_tooltip(&self, _cx: &WindowContext) -> Option<&'static str> {
+    fn icon_tooltip(&self, _window: &Window, _cx: &AppContext) -> Option<&'static str> {
         Some("Notification Panel")
     }
 
-    fn icon_label(&self, cx: &WindowContext) -> Option<String> {
+    fn icon_label(&self, _window: &Window, cx: &AppContext) -> Option<String> {
         let count = self.notification_store.read(cx).unread_notification_count();
         if count == 0 {
             None
@@ -744,7 +747,7 @@ impl NotificationToast {
     fn focus_notification_panel(&self, cx: &mut ViewContext<Self>) {
         let workspace = self.workspace.clone();
         let notification_id = self.notification_id;
-        cx.window_context().defer(move |cx| {
+        cx.window_context().defer(move |_window, cx| {
             workspace
                 .update(cx, |workspace, cx| {
                     if let Some(panel) = workspace.focus_panel::<NotificationPanel>(cx) {

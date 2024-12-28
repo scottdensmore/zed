@@ -192,7 +192,7 @@ pub fn initialize_workspace(
         auto_update_ui::notify_of_any_new_update(cx);
 
         let handle = cx.view().downgrade();
-        cx.on_window_should_close(move |cx| {
+        cx.on_window_should_close(move |_window, cx| {
             handle
                 .update(cx, |workspace, cx| {
                     // We'll handle closing asynchronously
@@ -252,7 +252,7 @@ fn initialize_linux_file_watcher(cx: &mut ViewContext<Workspace>) {
         );
         cx.spawn(|_, mut cx| async move {
             if prompt.await == Ok(0) {
-                cx.update(|cx| {
+                cx.update(|_window, cx| {
                     cx.open_url("https://zed.dev/docs/linux#could-not-start-inotify");
                     cx.quit();
                 })
@@ -288,7 +288,7 @@ fn show_software_emulation_warning_if_needed(
         );
         cx.spawn(|_, mut cx| async move {
             if prompt.await == Ok(1) {
-                cx.update(|cx| {
+                cx.update(|_window, cx| {
                     cx.open_url("https://zed.dev/docs/linux#zed-fails-to-open-windows");
                     cx.quit();
                 })
@@ -1509,7 +1509,7 @@ mod tests {
         assert_eq!(cx.update(|cx| cx.windows().len()), 2);
         let window2 = cx.update(|cx| cx.active_window().unwrap());
         assert!(window1 != window2);
-        cx.update_window(window1, |_, cx| cx.activate_window())
+        cx.update_window(window1, |_, window, cx| window.activate_window(cx))
             .unwrap();
 
         cx.update(|cx| {
@@ -3595,11 +3595,13 @@ mod tests {
         line: u32,
     ) {
         let available_actions = cx
-            .update(|cx| window.update(cx, |_, cx| cx.available_actions()))
+            .update(|cx| window.update(cx, |_, window, cx| window.available_actions(cx)))
             .unwrap();
         for (key, action) in actions {
             let bindings = cx
-                .update(|cx| window.update(cx, |_, cx| cx.bindings_for_action(action)))
+                .update(|cx| {
+                    window.update(cx, |_, window, cx| window.bindings_for_action(action, cx))
+                })
                 .unwrap();
             // assert that...
             assert!(

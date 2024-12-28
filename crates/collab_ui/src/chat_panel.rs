@@ -93,8 +93,11 @@ impl ChatPanel {
 
         cx.new_view(|cx: &mut ViewContext<Self>| {
             let view = cx.view().downgrade();
-            let message_list =
-                ListState::new(0, gpui::ListAlignment::Bottom, px(1000.), move |ix, cx| {
+            let message_list = ListState::new(
+                0,
+                gpui::ListAlignment::Bottom,
+                px(1000.),
+                move |ix, _window, cx| {
                     if let Some(view) = view.upgrade() {
                         view.update(cx, |view, cx| {
                             view.render_message(ix, cx).into_any_element()
@@ -102,7 +105,8 @@ impl ChatPanel {
                     } else {
                         div().into_any()
                     }
-                });
+                },
+            );
 
             message_list.set_scroll_handler(cx.listener(|this, event: &ListScrollEvent, cx| {
                 if event.visible_range.start < MESSAGE_LOADING_THRESHOLD {
@@ -369,7 +373,7 @@ impl ChatPanel {
                     ),
                 )
                 .cursor(CursorStyle::PointingHand)
-                .tooltip(|cx| Tooltip::text("Go to message", cx))
+                .tooltip(|window, cx| Tooltip::text("Go to message", window, cx))
                 .on_click(cx.listener(move |chat_panel, _, cx| {
                     if let Some(channel_id) = current_channel_id {
                         chat_panel
@@ -615,7 +619,7 @@ impl ChatPanel {
                                         })
                                     })),
                             )
-                            .tooltip(|cx| Tooltip::text("Reply", cx)),
+                            .tooltip(|window, cx| Tooltip::text("Reply", window, cx)),
                     ),
                 )
             })
@@ -660,7 +664,7 @@ impl ChatPanel {
                                             })
                                         })),
                                 )
-                                .tooltip(|cx| Tooltip::text("Edit", cx)),
+                                .tooltip(|window, cx| Tooltip::text("Edit", window, cx)),
                         ),
                     )
                 })
@@ -678,17 +682,18 @@ impl ChatPanel {
                                         ("trigger", message_id),
                                         IconName::Ellipsis,
                                     ))
-                                    .menu(move |cx| {
+                                    .menu(move |window, cx| {
                                         Some(Self::render_message_menu(
                                             &this,
                                             message_id,
                                             can_delete_message,
+                                            window,
                                             cx,
                                         ))
                                     }),
                             )
                             .id("more")
-                            .tooltip(|cx| Tooltip::text("More", cx)),
+                            .tooltip(|window, cx| Tooltip::text("More", window, cx)),
                     ),
                 )
             })
@@ -698,10 +703,11 @@ impl ChatPanel {
         this: &View<Self>,
         message_id: u64,
         can_delete_message: bool,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> View<ContextMenu> {
         let menu = {
-            ContextMenu::build(cx, move |menu, cx| {
+            ContextMenu::build(window, cx, move |menu, cx| {
                 menu.entry(
                     "Copy message text",
                     None,
@@ -777,8 +783,8 @@ impl ChatPanel {
                 );
 
                 rich_text.custom_ranges.push(range);
-                rich_text.set_tooltip_builder_for_custom_ranges(move |_, _, cx| {
-                    Some(Tooltip::text(edit_timestamp_text.clone(), cx))
+                rich_text.set_tooltip_builder_for_custom_ranges(move |_, _, window, cx| {
+                    Some(Tooltip::text(edit_timestamp_text.clone(), window, cx))
                 })
             }
         }
@@ -973,9 +979,10 @@ impl Render for ChatPanel {
                                             &collab_panel::ToggleFocus,
                                             cx,
                                         ))
-                                        .on_click(|_, cx| {
-                                            cx.dispatch_action(
+                                        .on_click(|_, window, cx| {
+                                            window.dispatch_action(
                                                 collab_panel::ToggleFocus.boxed_clone(),
+                                                cx,
                                             )
                                         }),
                                 ),
@@ -999,7 +1006,9 @@ impl Render for ChatPanel {
                         .child(
                             IconButton::new("cancel-edit-message", IconName::Close)
                                 .shape(ui::IconButtonShape::Square)
-                                .tooltip(|cx| Tooltip::text("Cancel edit message", cx))
+                                .tooltip(|window, cx| {
+                                    Tooltip::text("Cancel edit message", window, cx)
+                                })
                                 .on_click(cx.listener(move |this, _, cx| {
                                     this.cancel_edit_message(cx);
                                 })),
@@ -1061,7 +1070,7 @@ impl Render for ChatPanel {
                             .child(
                                 IconButton::new("close-reply-preview", IconName::Close)
                                     .shape(ui::IconButtonShape::Square)
-                                    .tooltip(|cx| Tooltip::text("Close reply", cx))
+                                    .tooltip(|window, cx| Tooltip::text("Close reply", window, cx))
                                     .on_click(cx.listener(move |this, _, cx| {
                                         this.close_reply_preview(cx);
                                     })),
@@ -1096,6 +1105,7 @@ impl FocusableView for ChatPanel {
 }
 
 impl Panel for ChatPanel {
+    // REFACTOR ERROR Unexpected type &gpui::WindowContext
     fn position(&self, cx: &gpui::WindowContext) -> DockPosition {
         ChatPanelSettings::get_global(cx).dock
     }
@@ -1112,6 +1122,7 @@ impl Panel for ChatPanel {
         );
     }
 
+    // REFACTOR ERROR Unexpected type &gpui::WindowContext
     fn size(&self, cx: &gpui::WindowContext) -> Pixels {
         self.width
             .unwrap_or_else(|| ChatPanelSettings::get_global(cx).default_width)
@@ -1134,7 +1145,7 @@ impl Panel for ChatPanel {
         "ChatPanel"
     }
 
-    fn icon(&self, cx: &WindowContext) -> Option<ui::IconName> {
+    fn icon(&self, _window: &Window, cx: &AppContext) -> Option<ui::IconName> {
         match ChatPanelSettings::get_global(cx).button {
             ChatPanelButton::Never => None,
             ChatPanelButton::Always => Some(ui::IconName::MessageBubbles),
@@ -1145,7 +1156,7 @@ impl Panel for ChatPanel {
         }
     }
 
-    fn icon_tooltip(&self, _cx: &WindowContext) -> Option<&'static str> {
+    fn icon_tooltip(&self, _window: &Window, _cx: &AppContext) -> Option<&'static str> {
         Some("Chat Panel")
     }
 
@@ -1153,7 +1164,7 @@ impl Panel for ChatPanel {
         Box::new(ToggleFocus)
     }
 
-    fn starts_open(&self, cx: &WindowContext) -> bool {
+    fn starts_open(&self, _window: &Window, cx: &AppContext) -> bool {
         ActiveCall::global(cx)
             .read(cx)
             .room()

@@ -257,7 +257,7 @@ impl ProjectDiffEditor {
                                 continue;
                             };
 
-                            cx.update(|cx| {
+                            cx.update(|_window, cx| {
                                 buffers.insert(
                                     entry_id,
                                     (
@@ -927,7 +927,7 @@ impl Item for ProjectDiffEditor {
         Some("Project Diff".into())
     }
 
-    fn tab_content(&self, params: TabContentParams, _: &WindowContext) -> AnyElement {
+    fn tab_content(&self, params: TabContentParams, _: &Window, _: &AppContext) -> AnyElement {
         if self.buffer_changes.is_empty() {
             Label::new("No changes")
                 .color(if params.selected {

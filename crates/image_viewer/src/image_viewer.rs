@@ -5,7 +5,7 @@ use editor::items::entry_git_aware_label_color;
 use gpui::{
     canvas, div, fill, img, opaque_grey, point, size, AnyElement, AppContext, Bounds, EventEmitter,
     FocusHandle, FocusableView, InteractiveElement, IntoElement, Model, ObjectFit, ParentElement,
-    Render, Styled, Task, View, ViewContext, VisualContext, WeakView, WindowContext,
+    Render, Styled, Task, View, ViewContext, VisualContext, WeakView, Window,
 };
 use persistence::IMAGE_VIEWER;
 use theme::Theme;
@@ -94,7 +94,12 @@ impl Item for ImageView {
         Some(file_path.into())
     }
 
-    fn tab_content(&self, params: TabContentParams, cx: &WindowContext) -> AnyElement {
+    fn tab_content(
+        &self,
+        params: TabContentParams,
+        _window: &Window,
+        cx: &AppContext,
+    ) -> AnyElement {
         let project_path = self.image_item.read(cx).project_path(cx);
         let label_color = if ItemSettings::get_global(cx).git_status {
             self.project
@@ -122,7 +127,7 @@ impl Item for ImageView {
             .into_any_element()
     }
 
-    fn tab_icon(&self, cx: &WindowContext) -> Option<Icon> {
+    fn tab_icon(&self, _window: &Window, cx: &AppContext) -> Option<Icon> {
         let path = self.image_item.read(cx).path();
         ItemSettings::get_global(cx)
             .file_icons
@@ -187,9 +192,10 @@ impl SerializableItem for ImageView {
         _workspace: WeakView<Workspace>,
         workspace_id: WorkspaceId,
         item_id: ItemId,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<gpui::Result<View<Self>>> {
-        cx.spawn(|mut cx| async move {
+        window.spawn(cx, |mut cx| async move {
             let image_path = IMAGE_VIEWER
                 .get_image_path(item_id, workspace_id)?
                 .ok_or_else(|| anyhow::anyhow!("No image path found"))?;
@@ -211,16 +217,21 @@ impl SerializableItem for ImageView {
                 .update(&mut cx, |project, cx| project.open_image(project_path, cx))?
                 .await?;
 
-            cx.update(|cx| Ok(cx.new_view(|cx| ImageView::new(image_item, project, cx))))?
+            cx.update(|window, cx| {
+                Ok(window.new_view(cx, |cx| ImageView::new(image_item, project, cx)))
+            })?
         })
     }
 
     fn cleanup(
         workspace_id: WorkspaceId,
         alive_items: Vec<ItemId>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<gpui::Result<()>> {
-        cx.spawn(|_| IMAGE_VIEWER.delete_unloaded_items(workspace_id, alive_items))
+        window.spawn(cx, |_| {
+            IMAGE_VIEWER.delete_unloaded_items(workspace_id, alive_items)
+        })
     }
 
     fn serialize(
@@ -257,7 +268,10 @@ impl FocusableView for ImageView {
 impl Render for ImageView {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let image = self.image_item.read(cx).image.clone();
-        let checkered_background = |bounds: Bounds<Pixels>, _, cx: &mut WindowContext| {
+        let checkered_background = |bounds: Bounds<Pixels>,
+                                    _,
+                                    window: &mut Window,
+                                    cx: &mut AppContext| {
             let square_size = 32.0;
 
             let start_y = bounds.origin.y.0;
@@ -282,7 +296,7 @@ impl Render for ImageView {
                         opaque_grey(0.7, 0.4)
                     };
 
-                    cx.paint_quad(fill(rect, color));
+                    window.paint_quad(fill(rect, color), cx);
                     color_swapper = !color_swapper;
                     x += square_size;
                 }

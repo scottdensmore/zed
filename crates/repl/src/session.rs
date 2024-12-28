@@ -150,10 +150,10 @@ impl EditorBlock {
                         .icon_color(Color::Muted)
                         .size(ButtonSize::Compact)
                         .shape(IconButtonShape::Square)
-                        .tooltip(|cx| Tooltip::text("Close output area", cx))
-                        .on_click(move |_, cx| {
+                        .tooltip(|window, cx| Tooltip::text("Close output area", window, cx))
+                        .on_click(move |_, window, cx| {
                             if let BlockId::Custom(block_id) = block_id {
-                                (on_close)(block_id, cx)
+                                (on_close)(block_id, window, cx)
                             }
                         }),
                 );
@@ -412,8 +412,8 @@ impl Session {
         let session_view = cx.view().downgrade();
         let weak_editor = self.editor.clone();
 
-        let on_close: CloseBlockFn =
-            Arc::new(move |block_id: CustomBlockId, cx: &mut WindowContext| {
+        let on_close: CloseBlockFn = Arc::new(
+            move |block_id: CustomBlockId, _window: &mut Window, cx: &mut AppContext| {
                 if let Some(session) = session_view.upgrade() {
                     session.update(cx, |session, cx| {
                         session.blocks.remove(&parent_message_id);
@@ -428,7 +428,8 @@ impl Session {
                         editor.remove_blocks(block_ids, None, cx);
                     });
                 }
-            });
+            },
+        );
 
         let Ok(editor_block) =
             EditorBlock::new(self.editor.clone(), anchor_range, status, on_close, cx)

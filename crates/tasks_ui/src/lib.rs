@@ -1,6 +1,6 @@
 use ::settings::Settings;
 use editor::{tasks::task_context, Editor};
-use gpui::{AppContext, Task as AsyncTask, ViewContext, WindowContext};
+use gpui::{AppContext, Task as AsyncTask, ViewContext, Window};
 use modal::{TaskOverrides, TasksModal};
 use project::{Location, WorktreeId};
 use task::{RevealTarget, TaskId};
@@ -212,7 +212,8 @@ fn spawn_task_with_name(
 
 fn active_item_selection_properties(
     workspace: &Workspace,
-    cx: &mut WindowContext,
+    _window: &mut Window,
+    cx: &mut AppContext,
 ) -> (Option<WorktreeId>, Option<Location>) {
     let active_item = workspace.active_item(cx);
     let worktree_id = active_item

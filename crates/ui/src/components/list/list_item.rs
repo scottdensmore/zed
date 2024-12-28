@@ -32,10 +32,11 @@ pub struct ListItem {
     end_hover_slot: Option<AnyElement>,
     toggle: Option<bool>,
     inset: bool,
-    on_click: Option<Box<dyn Fn(&ClickEvent, &mut WindowContext) + 'static>>,
-    on_toggle: Option<Arc<dyn Fn(&ClickEvent, &mut WindowContext) + 'static>>,
-    tooltip: Option<Box<dyn Fn(&mut WindowContext) -> AnyView + 'static>>,
-    on_secondary_mouse_down: Option<Box<dyn Fn(&MouseDownEvent, &mut WindowContext) + 'static>>,
+    on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut AppContext) + 'static>>,
+    on_toggle: Option<Arc<dyn Fn(&ClickEvent, &mut Window, &mut AppContext) + 'static>>,
+    tooltip: Option<Box<dyn Fn(&mut Window, &mut AppContext) -> AnyView + 'static>>,
+    on_secondary_mouse_down:
+        Option<Box<dyn Fn(&MouseDownEvent, &mut Window, &mut AppContext) + 'static>>,
     children: SmallVec<[AnyElement; 2]>,
     selectable: bool,
     outlined: bool,
@@ -79,20 +80,26 @@ impl ListItem {
         self
     }
 
-    pub fn on_click(mut self, handler: impl Fn(&ClickEvent, &mut WindowContext) + 'static) -> Self {
+    pub fn on_click(
+        mut self,
+        handler: impl Fn(&ClickEvent, &mut Window, &mut AppContext) + 'static,
+    ) -> Self {
         self.on_click = Some(Box::new(handler));
         self
     }
 
     pub fn on_secondary_mouse_down(
         mut self,
-        handler: impl Fn(&MouseDownEvent, &mut WindowContext) + 'static,
+        handler: impl Fn(&MouseDownEvent, &mut Window, &mut AppContext) + 'static,
     ) -> Self {
         self.on_secondary_mouse_down = Some(Box::new(handler));
         self
     }
 
-    pub fn tooltip(mut self, tooltip: impl Fn(&mut WindowContext) -> AnyView + 'static) -> Self {
+    pub fn tooltip(
+        mut self,
+        tooltip: impl Fn(&mut Window, &mut AppContext) -> AnyView + 'static,
+    ) -> Self {
         self.tooltip = Some(Box::new(tooltip));
         self
     }
@@ -119,7 +126,7 @@ impl ListItem {
 
     pub fn on_toggle(
         mut self,
-        on_toggle: impl Fn(&ClickEvent, &mut WindowContext) + 'static,
+        on_toggle: impl Fn(&ClickEvent, &mut Window, &mut AppContext) + 'static,
     ) -> Self {
         self.on_toggle = Some(Arc::new(on_toggle));
         self
@@ -177,7 +184,7 @@ impl ParentElement for ListItem {
 }
 
 impl RenderOnce for ListItem {
-    fn render(self, cx: &mut WindowContext) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut AppContext) -> impl IntoElement {
         h_flex()
             .id(self.id)
             .w_full()
@@ -185,7 +192,7 @@ impl RenderOnce for ListItem {
             // When an item is inset draw the indent spacing outside of the item
             .when(self.inset, |this| {
                 this.ml(self.indent_level as f32 * self.indent_step_size)
-                    .px(DynamicSpacing::Base04.rems(cx))
+                    .px(DynamicSpacing::Base04.rems(window, cx))
             })
             .when(!self.inset && !self.disabled, |this| {
                 this
@@ -216,7 +223,7 @@ impl RenderOnce for ListItem {
                     .relative()
                     .items_center()
                     .gap_1()
-                    .px(DynamicSpacing::Base06.rems(cx))
+                    .px(DynamicSpacing::Base06.rems(window, cx))
                     .map(|this| match self.spacing {
                         ListItemSpacing::Dense => this,
                         ListItemSpacing::Sparse => this.py_1(),
@@ -253,8 +260,8 @@ impl RenderOnce for ListItem {
                             .overflow_hidden()
                     })
                     .when_some(self.on_secondary_mouse_down, |this, on_mouse_down| {
-                        this.on_mouse_down(MouseButton::Right, move |event, cx| {
-                            (on_mouse_down)(event, cx)
+                        this.on_mouse_down(MouseButton::Right, move |event, window, cx| {
+                            (on_mouse_down)(event, window, cx)
                         })
                     })
                     .when_some(self.tooltip, |this, tooltip| this.tooltip(tooltip))
@@ -279,7 +286,7 @@ impl RenderOnce for ListItem {
                             .flex_grow()
                             .flex_shrink_0()
                             .flex_basis(relative(0.25))
-                            .gap(DynamicSpacing::Base06.rems(cx))
+                            .gap(DynamicSpacing::Base06.rems(window, cx))
                             .map(|list_content| {
                                 if self.overflow_x {
                                     list_content
@@ -307,7 +314,7 @@ impl RenderOnce for ListItem {
                             h_flex()
                                 .h_full()
                                 .absolute()
-                                .right(DynamicSpacing::Base06.rems(cx))
+                                .right(DynamicSpacing::Base06.rems(window, cx))
                                 .top_0()
                                 .visible_on_hover("list_item")
                                 .child(end_hover_slot),

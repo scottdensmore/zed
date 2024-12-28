@@ -14,7 +14,7 @@ use gpui::{
     EventEmitter, FocusHandle, FocusableView, Global, Hsla, InteractiveElement, IntoElement,
     KeyContext, Model, ModelContext, ParentElement, Point, Render, SharedString, Styled,
     Subscription, Task, TextStyle, UpdateGlobal, View, ViewContext, VisualContext, WeakModel,
-    WeakView, WindowContext,
+    WeakView, Window,
 };
 use language::Buffer;
 use menu::Confirm;
@@ -418,11 +418,11 @@ impl Item for ProjectSearchView {
             .update(cx, |editor, cx| editor.deactivated(cx));
     }
 
-    fn tab_icon(&self, _cx: &WindowContext) -> Option<Icon> {
+    fn tab_icon(&self, _window: &Window, _cx: &AppContext) -> Option<Icon> {
         Some(Icon::new(IconName::MagnifyingGlass))
     }
 
-    fn tab_content_text(&self, cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, cx: &AppContext) -> Option<SharedString> {
         let last_query: Option<SharedString> = self
             .model
             .read(cx)
@@ -917,7 +917,7 @@ impl ProjectSearchView {
         }
     }
 
-    pub fn search_query_text(&self, cx: &WindowContext) -> String {
+    pub fn search_query_text(&self, _window: &Window, cx: &AppContext) -> String {
         self.query_editor.read(cx).text(cx)
     }
 
@@ -1184,7 +1184,9 @@ impl ProjectSearchView {
                     .icon_position(IconPosition::Start)
                     .icon_size(IconSize::Small)
                     .key_binding(KeyBinding::for_action_in(&ToggleFilters, &focus_handle, cx))
-                    .on_click(|_event, cx| cx.dispatch_action(ToggleFilters.boxed_clone())),
+                    .on_click(|_event, window, cx| {
+                        window.dispatch_action(ToggleFilters.boxed_clone(), cx)
+                    }),
             )
             .child(
                 Button::new("find-replace", "Find and replace")
@@ -1192,7 +1194,9 @@ impl ProjectSearchView {
                     .icon_position(IconPosition::Start)
                     .icon_size(IconSize::Small)
                     .key_binding(KeyBinding::for_action_in(&ToggleReplace, &focus_handle, cx))
-                    .on_click(|_event, cx| cx.dispatch_action(ToggleReplace.boxed_clone())),
+                    .on_click(|_event, window, cx| {
+                        window.dispatch_action(ToggleReplace.boxed_clone(), cx)
+                    }),
             )
             .child(
                 Button::new("regex", "Match with regex")
@@ -1200,7 +1204,9 @@ impl ProjectSearchView {
                     .icon_position(IconPosition::Start)
                     .icon_size(IconSize::Small)
                     .key_binding(KeyBinding::for_action_in(&ToggleRegex, &focus_handle, cx))
-                    .on_click(|_event, cx| cx.dispatch_action(ToggleRegex.boxed_clone())),
+                    .on_click(|_event, window, cx| {
+                        window.dispatch_action(ToggleRegex.boxed_clone(), cx)
+                    }),
             )
             .child(
                 Button::new("match-case", "Match case")
@@ -1212,7 +1218,9 @@ impl ProjectSearchView {
                         &focus_handle,
                         cx,
                     ))
-                    .on_click(|_event, cx| cx.dispatch_action(ToggleCaseSensitive.boxed_clone())),
+                    .on_click(|_event, window, cx| {
+                        window.dispatch_action(ToggleCaseSensitive.boxed_clone(), cx)
+                    }),
             )
             .child(
                 Button::new("match-whole-words", "Match whole words")
@@ -1224,13 +1232,15 @@ impl ProjectSearchView {
                         &focus_handle,
                         cx,
                     ))
-                    .on_click(|_event, cx| cx.dispatch_action(ToggleWholeWord.boxed_clone())),
+                    .on_click(|_event, window, cx| {
+                        window.dispatch_action(ToggleWholeWord.boxed_clone(), cx)
+                    }),
             )
     }
 
-    fn border_color_for(&self, panel: InputPanel, cx: &WindowContext) -> Hsla {
+    fn border_color_for(&self, panel: InputPanel, window: &Window, cx: &AppContext) -> Hsla {
         if self.panels_with_errors.contains(&panel) {
-            Color::Error.color(cx)
+            Color::Error.color(window, cx)
         } else {
             cx.theme().colors().border
         }
@@ -1639,7 +1649,9 @@ impl Render for ProjectSearchBar {
             .child(
                 IconButton::new("project-search-filter-button", IconName::Filter)
                     .shape(IconButtonShape::Square)
-                    .tooltip(|cx| Tooltip::for_action("Toggle Filters", &ToggleFilters, cx))
+                    .tooltip(|window, cx| {
+                        Tooltip::for_action("Toggle Filters", &ToggleFilters, window, cx)
+                    })
                     .on_click(cx.listener(|this, _, cx| {
                         this.toggle_filters(cx);
                     }))
@@ -1651,11 +1663,12 @@ impl Render for ProjectSearchBar {
                     )
                     .tooltip({
                         let focus_handle = focus_handle.clone();
-                        move |cx| {
+                        move |window, cx| {
                             Tooltip::for_action_in(
                                 "Toggle Filters",
                                 &ToggleFilters,
                                 &focus_handle,
+                                window,
                                 cx,
                             )
                         }
@@ -1675,11 +1688,12 @@ impl Render for ProjectSearchBar {
                     )
                     .tooltip({
                         let focus_handle = focus_handle.clone();
-                        move |cx| {
+                        move |window, cx| {
                             Tooltip::for_action_in(
                                 "Toggle Replace",
                                 &ToggleReplace,
                                 &focus_handle,
+                                window,
                                 cx,
                             )
                         }
@@ -1724,11 +1738,12 @@ impl Render for ProjectSearchBar {
                     }))
                     .tooltip({
                         let focus_handle = focus_handle.clone();
-                        move |cx| {
+                        move |window, cx| {
                             Tooltip::for_action_in(
                                 "Go To Previous Match",
                                 &SelectPrevMatch,
                                 &focus_handle,
+                                window,
                                 cx,
                             )
                         }
@@ -1747,11 +1762,12 @@ impl Render for ProjectSearchBar {
                     }))
                     .tooltip({
                         let focus_handle = focus_handle.clone();
-                        move |cx| {
+                        move |window, cx| {
                             Tooltip::for_action_in(
                                 "Go To Next Match",
                                 &SelectNextMatch,
                                 &focus_handle,
+                                window,
                                 cx,
                             )
                         }
@@ -1769,8 +1785,12 @@ impl Render for ProjectSearchBar {
                         },
                     ))
                     .when(limit_reached, |el| {
-                        el.tooltip(|cx| {
-                            Tooltip::text("Search limits reached.\nTry narrowing your search.", cx)
+                        el.tooltip(|window, cx| {
+                            Tooltip::text(
+                                "Search limits reached.\nTry narrowing your search.",
+                                window,
+                                cx,
+                            )
                         })
                     }),
             );
@@ -1804,11 +1824,12 @@ impl Render for ProjectSearchBar {
                                 }))
                                 .tooltip({
                                     let focus_handle = focus_handle.clone();
-                                    move |cx| {
+                                    move |window, cx| {
                                         Tooltip::for_action_in(
                                             "Replace Next Match",
                                             &ReplaceNext,
                                             &focus_handle,
+                                            window,
                                             cx,
                                         )
                                     }
@@ -1826,11 +1847,12 @@ impl Render for ProjectSearchBar {
                                 }))
                                 .tooltip({
                                     let focus_handle = focus_handle.clone();
-                                    move |cx| {
+                                    move |window, cx| {
                                         Tooltip::for_action_in(
                                             "Replace All Matches",
                                             &ReplaceAll,
                                             &focus_handle,
+                                            window,
                                             cx,
                                         )
                                     }
@@ -1877,7 +1899,9 @@ impl Render for ProjectSearchBar {
                             IconButton::new("project-search-opened-only", IconName::FileSearch)
                                 .shape(IconButtonShape::Square)
                                 .toggle_state(self.is_opened_only_enabled(cx))
-                                .tooltip(|cx| Tooltip::text("Only Search Open Files", cx))
+                                .tooltip(|window, cx| {
+                                    Tooltip::text("Only Search Open Files", window, cx)
+                                })
                                 .on_click(cx.listener(|this, _, cx| {
                                     this.toggle_opened_only(cx);
                                 })),

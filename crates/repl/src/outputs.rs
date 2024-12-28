@@ -74,32 +74,40 @@ fn rank_mime_type(mimetype: &MimeType) -> usize {
 }
 
 pub(crate) trait OutputContent {
-    fn clipboard_content(&self, cx: &WindowContext) -> Option<ClipboardItem>;
-    fn has_clipboard_content(&self, _cx: &WindowContext) -> bool {
+    fn clipboard_content(&self, _window: &Window, cx: &AppContext) -> Option<ClipboardItem>;
+    fn has_clipboard_content(&self, _window: &Window, _cx: &AppContext) -> bool {
         false
     }
-    fn has_buffer_content(&self, _cx: &WindowContext) -> bool {
+    fn has_buffer_content(&self, _window: &Window, _cx: &AppContext) -> bool {
         false
     }
-    fn buffer_content(&mut self, _cx: &mut WindowContext) -> Option<Model<Buffer>> {
+    fn buffer_content(
+        &mut self,
+        _window: &mut Window,
+        _cx: &mut AppContext,
+    ) -> Option<Model<Buffer>> {
         None
     }
 }
 
 impl<V: OutputContent + 'static> OutputContent for View<V> {
-    fn clipboard_content(&self, cx: &WindowContext) -> Option<ClipboardItem> {
-        self.read(cx).clipboard_content(cx)
+    fn clipboard_content(&self, window: &Window, cx: &AppContext) -> Option<ClipboardItem> {
+        self.read(cx).clipboard_content(window, cx)
     }
 
-    fn has_clipboard_content(&self, cx: &WindowContext) -> bool {
-        self.read(cx).has_clipboard_content(cx)
+    fn has_clipboard_content(&self, window: &Window, cx: &AppContext) -> bool {
+        self.read(cx).has_clipboard_content(window, cx)
     }
 
-    fn has_buffer_content(&self, cx: &WindowContext) -> bool {
-        self.read(cx).has_buffer_content(cx)
+    fn has_buffer_content(&self, window: &Window, cx: &AppContext) -> bool {
+        self.read(cx).has_buffer_content(window, cx)
     }
 
-    fn buffer_content(&mut self, cx: &mut WindowContext) -> Option<Model<Buffer>> {
+    fn buffer_content(
+        &mut self,
+        _window: &mut Window,
+        cx: &mut AppContext,
+    ) -> Option<Model<Buffer>> {
         self.update(cx, |item, cx| item.buffer_content(cx))
     }
 }
@@ -147,7 +155,7 @@ impl Output {
                     el.child(
                         IconButton::new(ElementId::Name("copy-output".into()), IconName::Copy)
                             .style(ButtonStyle::Transparent)
-                            .tooltip(move |cx| Tooltip::text("Copy Output", cx))
+                            .tooltip(move |window, cx| Tooltip::text("Copy Output", window, cx))
                             .on_click(cx.listener(move |_, _, cx| {
                                 let clipboard_content = v.clipboard_content(cx);
 
@@ -165,7 +173,7 @@ impl Output {
                             IconName::FileText,
                         )
                         .style(ButtonStyle::Transparent)
-                        .tooltip(move |cx| Tooltip::text("Open in Buffer", cx))
+                        .tooltip(move |window, cx| Tooltip::text("Open in Buffer", window, cx))
                         .on_click(cx.listener({
                             let workspace = workspace.clone();
 
@@ -259,14 +267,19 @@ impl Output {
         }
     }
 
-    pub fn new(data: &MimeBundle, display_id: Option<String>, cx: &mut WindowContext) -> Self {
+    pub fn new(
+        data: &MimeBundle,
+        display_id: Option<String>,
+        window: &mut Window,
+        cx: &mut AppContext,
+    ) -> Self {
         match data.richest(rank_mime_type) {
             Some(MimeType::Plain(text)) => Output::Plain {
-                content: cx.new_view(|cx| TerminalOutput::from(text, cx)),
+                content: window.new_view(cx, |cx| TerminalOutput::from(text, cx)),
                 display_id,
             },
             Some(MimeType::Markdown(text)) => {
-                let view = cx.new_view(|cx| MarkdownView::from(text.clone(), cx));
+                let view = window.new_view(cx, |cx| MarkdownView::from(text.clone(), cx));
                 Output::Markdown {
                     content: view,
                     display_id,
@@ -274,13 +287,13 @@ impl Output {
             }
             Some(MimeType::Png(data)) | Some(MimeType::Jpeg(data)) => match ImageView::from(data) {
                 Ok(view) => Output::Image {
-                    content: cx.new_view(|_| view),
+                    content: window.new_view(cx, |_| view),
                     display_id,
                 },
                 Err(error) => Output::Message(format!("Failed to load image: {}", error)),
             },
             Some(MimeType::DataTable(data)) => Output::Table {
-                content: cx.new_view(|cx| TableView::new(data, cx)),
+                content: window.new_view(cx, |cx| TableView::new(data, cx)),
                 display_id,
             },
             // Any other media types are not supported

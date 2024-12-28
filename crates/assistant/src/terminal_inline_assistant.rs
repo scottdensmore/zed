@@ -91,16 +91,18 @@ impl TerminalInlineAssistant {
         workspace: Option<WeakView<Workspace>>,
         assistant_panel: Option<&View<AssistantPanel>>,
         initial_prompt: Option<String>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) {
         let terminal = terminal_view.read(cx).terminal().clone();
         let assist_id = self.next_assist_id.post_inc();
-        let prompt_buffer =
-            cx.new_model(|cx| Buffer::local(initial_prompt.unwrap_or_default(), cx));
-        let prompt_buffer = cx.new_model(|cx| MultiBuffer::singleton(prompt_buffer, cx));
-        let codegen = cx.new_model(|_| Codegen::new(terminal, self.telemetry.clone()));
+        let prompt_buffer = window.new_model(cx, |cx| {
+            Buffer::local(initial_prompt.unwrap_or_default(), cx)
+        });
+        let prompt_buffer = window.new_model(cx, |cx| MultiBuffer::singleton(prompt_buffer, cx));
+        let codegen = window.new_model(cx, |_| Codegen::new(terminal, self.telemetry.clone()));
 
-        let prompt_editor = cx.new_view(|cx| {
+        let prompt_editor = window.new_view(cx, |cx| {
             PromptEditor::new(
                 assist_id,
                 self.prompt_history.clone(),
@@ -127,15 +129,21 @@ impl TerminalInlineAssistant {
             assistant_panel.is_some(),
             prompt_editor,
             workspace.clone(),
+            window,
             cx,
         );
 
         self.assists.insert(assist_id, terminal_assistant);
 
-        self.focus_assist(assist_id, cx);
+        self.focus_assist(assist_id, window, cx);
     }
 
-    fn focus_assist(&mut self, assist_id: TerminalInlineAssistId, cx: &mut WindowContext) {
+    fn focus_assist(
+        &mut self,
+        assist_id: TerminalInlineAssistId,
+        _window: &mut Window,
+        cx: &mut AppContext,
+    ) {
         let assist = &self.assists[&assist_id];
         if let Some(prompt_editor) = assist.prompt_editor.as_ref() {
             prompt_editor.update(cx, |this, cx| {
@@ -151,32 +159,38 @@ impl TerminalInlineAssistant {
         &mut self,
         prompt_editor: View<PromptEditor>,
         event: &PromptEditorEvent,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) {
         let assist_id = prompt_editor.read(cx).id;
         match event {
             PromptEditorEvent::StartRequested => {
-                self.start_assist(assist_id, cx);
+                self.start_assist(assist_id, window, cx);
             }
             PromptEditorEvent::StopRequested => {
-                self.stop_assist(assist_id, cx);
+                self.stop_assist(assist_id, window, cx);
             }
             PromptEditorEvent::ConfirmRequested { execute } => {
-                self.finish_assist(assist_id, false, *execute, cx);
+                self.finish_assist(assist_id, false, *execute, window, cx);
             }
             PromptEditorEvent::CancelRequested => {
-                self.finish_assist(assist_id, true, false, cx);
+                self.finish_assist(assist_id, true, false, window, cx);
             }
             PromptEditorEvent::DismissRequested => {
-                self.dismiss_assist(assist_id, cx);
+                self.dismiss_assist(assist_id, window, cx);
             }
             PromptEditorEvent::Resized { height_in_lines } => {
-                self.insert_prompt_editor_into_terminal(assist_id, *height_in_lines, cx);
+                self.insert_prompt_editor_into_terminal(assist_id, *height_in_lines, window, cx);
             }
         }
     }
 
-    fn start_assist(&mut self, assist_id: TerminalInlineAssistId, cx: &mut WindowContext) {
+    fn start_assist(
+        &mut self,
+        assist_id: TerminalInlineAssistId,
+        window: &mut Window,
+        cx: &mut AppContext,
+    ) {
         let assist = if let Some(assist) = self.assists.get_mut(&assist_id) {
             assist
         } else {
@@ -207,14 +221,22 @@ impl TerminalInlineAssistant {
             .log_err();
 
         let codegen = assist.codegen.clone();
-        let Some(request) = self.request_for_inline_assist(assist_id, cx).log_err() else {
+        let Some(request) = self
+            .request_for_inline_assist(assist_id, window, cx)
+            .log_err()
+        else {
             return;
         };
 
         codegen.update(cx, |codegen, cx| codegen.start(request, cx));
     }
 
-    fn stop_assist(&mut self, assist_id: TerminalInlineAssistId, cx: &mut WindowContext) {
+    fn stop_assist(
+        &mut self,
+        assist_id: TerminalInlineAssistId,
+        _window: &mut Window,
+        cx: &mut AppContext,
+    ) {
         let assist = if let Some(assist) = self.assists.get_mut(&assist_id) {
             assist
         } else {
@@ -227,7 +249,8 @@ impl TerminalInlineAssistant {
     fn request_for_inline_assist(
         &self,
         assist_id: TerminalInlineAssistId,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Result<LanguageModelRequest> {
         let assist = self.assists.get(&assist_id).context("invalid assist")?;
 
@@ -248,7 +271,7 @@ impl TerminalInlineAssistant {
         let context_request = if assist.include_context {
             assist.workspace.as_ref().and_then(|workspace| {
                 let workspace = workspace.upgrade()?.read(cx);
-                let assistant_panel = workspace.panel::<AssistantPanel>(cx)?;
+                let assistant_panel = workspace.panel::<AssistantPanel>(window, cx)?;
                 Some(
                     assistant_panel
                         .read(cx)
@@ -297,9 +320,10 @@ impl TerminalInlineAssistant {
         assist_id: TerminalInlineAssistId,
         undo: bool,
         execute: bool,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) {
-        self.dismiss_assist(assist_id, cx);
+        self.dismiss_assist(assist_id, window, cx);
 
         if let Some(assist) = self.assists.remove(&assist_id) {
             assist
@@ -349,7 +373,8 @@ impl TerminalInlineAssistant {
     fn dismiss_assist(
         &mut self,
         assist_id: TerminalInlineAssistId,
-        cx: &mut WindowContext,
+        _window: &mut Window,
+        cx: &mut AppContext,
     ) -> bool {
         let Some(assist) = self.assists.get_mut(&assist_id) else {
             return false;
@@ -371,7 +396,8 @@ impl TerminalInlineAssistant {
         &mut self,
         assist_id: TerminalInlineAssistId,
         height: u8,
-        cx: &mut WindowContext,
+        _window: &mut Window,
+        cx: &mut AppContext,
     ) {
         if let Some(assist) = self.assists.get_mut(&assist_id) {
             if let Some(prompt_editor) = assist.prompt_editor.as_ref().cloned() {
@@ -407,7 +433,8 @@ impl TerminalInlineAssist {
         include_context: bool,
         prompt_editor: View<PromptEditor>,
         workspace: Option<WeakView<Workspace>>,
-        cx: &mut WindowContext,
+        _window: &mut Window,
+        cx: &mut AppContext,
     ) -> Self {
         let codegen = prompt_editor.read(cx).codegen.clone();
         Self {
@@ -417,13 +444,13 @@ impl TerminalInlineAssist {
             workspace: workspace.clone(),
             include_context,
             _subscriptions: vec![
-                cx.subscribe(&prompt_editor, |prompt_editor, event, cx| {
-                    TerminalInlineAssistant::update_global(cx, |this, cx| {
+                cx.subscribe(&prompt_editor, |prompt_editor, event, _window, cx| {
+                    TerminalInlineAssistant::update_global(cx, |this, _window, cx| {
                         this.handle_prompt_editor_event(prompt_editor, event, cx)
                     })
                 }),
-                cx.subscribe(&codegen, move |codegen, event, cx| {
-                    TerminalInlineAssistant::update_global(cx, |this, cx| match event {
+                cx.subscribe(&codegen, move |codegen, event, _window, cx| {
+                    TerminalInlineAssistant::update_global(cx, |this, _window, cx| match event {
                         CodegenEvent::Finished => {
                             let assist = if let Some(assist) = this.assists.get(&assist_id) {
                                 assist
@@ -503,14 +530,16 @@ impl Render for PromptEditor {
                     IconButton::new("cancel", IconName::Close)
                         .icon_color(Color::Muted)
                         .shape(IconButtonShape::Square)
-                        .tooltip(|cx| Tooltip::for_action("Cancel Assist", &menu::Cancel, cx))
+                        .tooltip(|_window, cx| {
+                            Tooltip::for_action("Cancel Assist", &menu::Cancel, cx)
+                        })
                         .on_click(
                             cx.listener(|_, _, cx| cx.emit(PromptEditorEvent::CancelRequested)),
                         ),
                     IconButton::new("start", IconName::SparkleAlt)
                         .icon_color(Color::Muted)
                         .shape(IconButtonShape::Square)
-                        .tooltip(|cx| Tooltip::for_action("Generate", &menu::Confirm, cx))
+                        .tooltip(|_window, cx| Tooltip::for_action("Generate", &menu::Confirm, cx))
                         .on_click(
                             cx.listener(|_, _, cx| cx.emit(PromptEditorEvent::StartRequested)),
                         ),
@@ -521,14 +550,14 @@ impl Render for PromptEditor {
                     IconButton::new("cancel", IconName::Close)
                         .icon_color(Color::Muted)
                         .shape(IconButtonShape::Square)
-                        .tooltip(|cx| Tooltip::text("Cancel Assist", cx))
+                        .tooltip(|_window, cx| Tooltip::text("Cancel Assist", cx))
                         .on_click(
                             cx.listener(|_, _, cx| cx.emit(PromptEditorEvent::CancelRequested)),
                         ),
                     IconButton::new("stop", IconName::Stop)
                         .icon_color(Color::Error)
                         .shape(IconButtonShape::Square)
-                        .tooltip(|cx| {
+                        .tooltip(|_window, cx| {
                             Tooltip::with_meta(
                                 "Interrupt Generation",
                                 Some(&menu::Cancel),
@@ -545,7 +574,9 @@ impl Render for PromptEditor {
                 let cancel = IconButton::new("cancel", IconName::Close)
                     .icon_color(Color::Muted)
                     .shape(IconButtonShape::Square)
-                    .tooltip(|cx| Tooltip::for_action("Cancel Assist", &menu::Cancel, cx))
+                    .tooltip(|window, cx| {
+                        Tooltip::for_action("Cancel Assist", &menu::Cancel, window, cx)
+                    })
                     .on_click(cx.listener(|_, _, cx| cx.emit(PromptEditorEvent::CancelRequested)));
 
                 let has_error = matches!(status, CodegenStatus::Error(_));
@@ -555,7 +586,7 @@ impl Render for PromptEditor {
                         IconButton::new("restart", IconName::RotateCw)
                             .icon_color(Color::Info)
                             .shape(IconButtonShape::Square)
-                            .tooltip(|cx| {
+                            .tooltip(|_window, cx| {
                                 Tooltip::with_meta(
                                     "Restart Generation",
                                     Some(&menu::Confirm),
@@ -573,7 +604,7 @@ impl Render for PromptEditor {
                         IconButton::new("accept", IconName::Check)
                             .icon_color(Color::Info)
                             .shape(IconButtonShape::Square)
-                            .tooltip(|cx| {
+                            .tooltip(|_window, cx| {
                                 Tooltip::for_action("Accept Generated Command", &menu::Confirm, cx)
                             })
                             .on_click(cx.listener(|_, _, cx| {
@@ -582,7 +613,7 @@ impl Render for PromptEditor {
                         IconButton::new("confirm", IconName::Play)
                             .icon_color(Color::Info)
                             .shape(IconButtonShape::Square)
-                            .tooltip(|cx| {
+                            .tooltip(|_window, cx| {
                                 Tooltip::for_action(
                                     "Execute Generated Command",
                                     &menu::SecondaryConfirm,
@@ -620,7 +651,7 @@ impl Render for PromptEditor {
                             .shape(IconButtonShape::Square)
                             .icon_size(IconSize::Small)
                             .icon_color(Color::Muted)
-                            .tooltip(move |cx| {
+                            .tooltip(move |window, cx| {
                                 Tooltip::with_meta(
                                     format!(
                                         "Using {}",
@@ -631,6 +662,7 @@ impl Render for PromptEditor {
                                     ),
                                     None,
                                     "Change Model",
+                                    window,
                                     cx,
                                 )
                             }),
@@ -641,7 +673,9 @@ impl Render for PromptEditor {
                             Some(
                                 div()
                                     .id("error")
-                                    .tooltip(move |cx| Tooltip::text(error_message.clone(), cx))
+                                    .tooltip(move |window, cx| {
+                                        Tooltip::text(error_message.clone(), window, cx)
+                                    })
                                     .child(
                                         Icon::new(IconName::XCircle)
                                             .size(IconSize::Small)
@@ -740,8 +774,8 @@ impl PromptEditor {
         this
     }
 
-    fn placeholder_text(cx: &WindowContext) -> String {
-        let context_keybinding = text_for_action(&crate::ToggleFocus, cx)
+    fn placeholder_text(window: &Window, cx: &AppContext) -> String {
+        let context_keybinding = text_for_action(&crate::ToggleFocus, window, cx)
             .map(|keybinding| format!(" • {keybinding} for context"))
             .unwrap_or_default();
 
@@ -793,12 +827,15 @@ impl PromptEditor {
         };
         self.pending_token_count = cx.spawn(|this, mut cx| async move {
             cx.background_executor().timer(Duration::from_secs(1)).await;
-            let request =
-                cx.update_global(|inline_assistant: &mut TerminalInlineAssistant, cx| {
-                    inline_assistant.request_for_inline_assist(assist_id, cx)
-                })??;
+            let request = cx.update_global(
+                |inline_assistant: &mut TerminalInlineAssistant, window, cx| {
+                    inline_assistant.request_for_inline_assist(assist_id, window, cx)
+                },
+            )??;
 
-            let token_count = cx.update(|cx| model.count_tokens(request, cx))?.await?;
+            let token_count = cx
+                .update(|_window, cx| model.count_tokens(request, cx))?
+                .await?;
             this.update(&mut cx, |this, cx| {
                 this.token_count = Some(token_count);
                 cx.notify();
@@ -965,17 +1002,20 @@ impl PromptEditor {
             );
         if let Some(workspace) = self.workspace.clone() {
             token_count = token_count
-                .tooltip(|cx| {
+                .tooltip(|window, cx| {
                     Tooltip::with_meta(
                         "Tokens Used by Inline Assistant",
                         None,
                         "Click to Open Assistant Panel",
+                        window,
                         cx,
                     )
                 })
                 .cursor_pointer()
-                .on_mouse_down(gpui::MouseButton::Left, |_, cx| cx.stop_propagation())
-                .on_click(move |_, cx| {
+                .on_mouse_down(gpui::MouseButton::Left, |_, _window, cx| {
+                    cx.stop_propagation()
+                })
+                .on_click(move |_, _window, cx| {
                     cx.stop_propagation();
                     workspace
                         .update(cx, |workspace, cx| {
@@ -986,7 +1026,7 @@ impl PromptEditor {
         } else {
             token_count = token_count
                 .cursor_default()
-                .tooltip(|cx| Tooltip::text("Tokens Used by Inline Assistant", cx));
+                .tooltip(|window, cx| Tooltip::text("Tokens Used by Inline Assistant", window, cx));
         }
 
         Some(token_count)

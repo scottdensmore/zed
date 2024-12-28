@@ -1,5 +1,5 @@
 use anyhow::Context as _;
-use gpui::{View, ViewContext, WindowContext};
+use gpui::{AppContext, View, ViewContext, Window};
 use language::Language;
 use url::Url;
 
@@ -84,11 +84,11 @@ pub fn switch_source_header(
     .detach_and_log_err(cx);
 }
 
-pub fn apply_related_actions(editor: &View<Editor>, cx: &mut WindowContext) {
+pub fn apply_related_actions(editor: &View<Editor>, window: &mut Window, cx: &mut AppContext) {
     if editor.update(cx, |e, cx| {
         find_specific_language_server_in_selection(e, cx, is_c_language, CLANGD_SERVER_NAME)
             .is_some()
     }) {
-        register_action(editor, cx, switch_source_header);
+        register_action(editor, window, cx, switch_source_header);
     }
 }

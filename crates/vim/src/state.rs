@@ -183,7 +183,7 @@ impl VimGlobals {
     pub(crate) fn register(cx: &mut AppContext) {
         cx.set_global(VimGlobals::default());
 
-        cx.observe_keystrokes(|event, cx| {
+        cx.observe_keystrokes(|event, _window, cx| {
             let Some(action) = event.action.as_ref().map(|action| action.boxed_clone()) else {
                 return;
             };

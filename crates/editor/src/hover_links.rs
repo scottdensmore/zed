@@ -536,7 +536,7 @@ pub fn show_link_definition(
 
                         Some((range, vec![HoverLink::File(filename)]))
                     } else if let Some(provider) = provider {
-                        let task = cx.update(|cx| {
+                        let task = cx.update(|_window, cx| {
                             provider.definitions(&buffer, buffer_position, preferred_kind, cx)
                         })?;
                         if let Some(task) = task {

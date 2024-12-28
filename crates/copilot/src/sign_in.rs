@@ -13,17 +13,17 @@ const COPILOT_SIGN_UP_URL: &str = "https://github.com/features/copilot";
 
 struct CopilotStartingToast;
 
-pub fn initiate_sign_in(cx: &mut WindowContext) {
+pub fn initiate_sign_in(window: &mut Window, cx: &mut AppContext) {
     let Some(copilot) = Copilot::global(cx) else {
         return;
     };
     let status = copilot.read(cx).status();
-    let Some(workspace) = cx.window_handle().downcast::<Workspace>() else {
+    let Some(workspace) = window.window_handle(cx).downcast::<Workspace>() else {
         return;
     };
     match status {
         Status::Starting { task } => {
-            let Some(workspace) = cx.window_handle().downcast::<Workspace>() else {
+            let Some(workspace) = window.window_handle(cx).downcast::<Workspace>() else {
                 return;
             };
 
@@ -40,32 +40,35 @@ pub fn initiate_sign_in(cx: &mut WindowContext) {
                 return;
             };
 
-            cx.spawn(|mut cx| async move {
-                task.await;
-                if let Some(copilot) = cx.update(|cx| Copilot::global(cx)).ok().flatten() {
-                    workspace
-                        .update(&mut cx, |workspace, cx| match copilot.read(cx).status() {
-                            Status::Authorized => workspace.show_toast(
-                                Toast::new(
-                                    NotificationId::unique::<CopilotStartingToast>(),
-                                    "Copilot has started!",
-                                ),
-                                cx,
-                            ),
-                            _ => {
-                                workspace.dismiss_toast(
-                                    &NotificationId::unique::<CopilotStartingToast>(),
+            window
+                .spawn(cx, |mut cx| async move {
+                    task.await;
+                    if let Some(copilot) =
+                        cx.update(|_window, cx| Copilot::global(cx)).ok().flatten()
+                    {
+                        workspace
+                            .update(&mut cx, |workspace, cx| match copilot.read(cx).status() {
+                                Status::Authorized => workspace.show_toast(
+                                    Toast::new(
+                                        NotificationId::unique::<CopilotStartingToast>(),
+                                        "Copilot has started!",
+                                    ),
                                     cx,
-                                );
-                                copilot
-                                    .update(cx, |copilot, cx| copilot.sign_in(cx))
-                                    .detach_and_log_err(cx);
-                            }
-                        })
-                        .log_err();
-                }
-            })
-            .detach();
+                                ),
+                                _ => {
+                                    workspace.dismiss_toast(
+                                        &NotificationId::unique::<CopilotStartingToast>(),
+                                        cx,
+                                    );
+                                    copilot
+                                        .update(cx, |copilot, cx| copilot.sign_in(cx))
+                                        .detach_and_log_err(cx);
+                                }
+                            })
+                            .log_err();
+                    }
+                })
+                .detach();
         }
         _ => {
             copilot.update(cx, |this, cx| this.sign_in(cx)).detach();
@@ -136,9 +139,9 @@ impl CopilotCodeVerification {
             .justify_between()
             .on_mouse_down(gpui::MouseButton::Left, {
                 let user_code = data.user_code.clone();
-                move |_, cx| {
+                move |_, window, cx| {
                     cx.write_to_clipboard(ClipboardItem::new_string(user_code.clone()));
-                    cx.refresh();
+                    window.refresh(cx);
                 }
             })
             .child(div().flex_1().child(Label::new(data.user_code.clone())))
@@ -215,7 +218,7 @@ impl CopilotCodeVerification {
             .child(
                 Button::new("copilot-subscribe-button", "Subscribe on GitHub")
                     .full_width()
-                    .on_click(|_, cx| cx.open_url(COPILOT_SIGN_UP_URL)),
+                    .on_click(|_, _window, cx| cx.open_url(COPILOT_SIGN_UP_URL)),
             )
             .child(
                 Button::new("copilot-subscribe-cancel-button", "Cancel")

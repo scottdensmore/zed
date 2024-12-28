@@ -246,7 +246,7 @@ pub struct ChannelModalDelegate {
 impl PickerDelegate for ChannelModalDelegate {
     type ListItem = ListItem;
 
-    fn placeholder_text(&self, _cx: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, _window: &mut Window, _cx: &mut AppContext) -> Arc<str> {
         "Search collaborator by username...".into()
     }
 
@@ -558,7 +558,7 @@ impl ChannelModalDelegate {
 
             if role == ChannelRole::Admin || role == ChannelRole::Member {
                 let picker = picker.clone();
-                menu = menu.entry("Demote to Guest", None, move |cx| {
+                menu = menu.entry("Demote to Guest", None, move |_window, cx| {
                     picker.update(cx, |picker, cx| {
                         picker
                             .delegate
@@ -575,7 +575,7 @@ impl ChannelModalDelegate {
                     "Demote to Member"
                 };
 
-                menu = menu.entry(label, None, move |cx| {
+                menu = menu.entry(label, None, move |_window, cx| {
                     picker.update(cx, |picker, cx| {
                         picker
                             .delegate
@@ -586,7 +586,7 @@ impl ChannelModalDelegate {
 
             if role == ChannelRole::Member || role == ChannelRole::Guest {
                 let picker = picker.clone();
-                menu = menu.entry("Promote to Admin", None, move |cx| {
+                menu = menu.entry("Promote to Admin", None, move |_window, cx| {
                     picker.update(cx, |picker, cx| {
                         picker
                             .delegate
@@ -598,7 +598,7 @@ impl ChannelModalDelegate {
             menu = menu.separator();
             menu = menu.entry("Remove from Channel", None, {
                 let picker = picker.clone();
-                move |cx| {
+                move |_window, cx| {
                     picker.update(cx, |picker, cx| {
                         picker.delegate.remove_member(user_id, cx);
                     })

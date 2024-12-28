@@ -6,7 +6,7 @@ use gpui::{
     ElementInputHandler, FocusHandle, FocusableView, GlobalElementId, KeyBinding, Keystroke,
     LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
     ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, View, ViewContext,
-    ViewInputHandler, WindowBounds, WindowContext, WindowOptions,
+    ViewInputHandler, Window, WindowBounds, WindowOptions,
 };
 use unicode_segmentation::*;
 
@@ -377,12 +377,13 @@ impl Element for TextElement {
     fn request_layout(
         &mut self,
         _id: Option<&GlobalElementId>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         style.size.width = relative(1.).into();
-        style.size.height = cx.line_height().into();
-        (cx.request_layout(style, []), ())
+        style.size.height = window.line_height(cx).into();
+        (window.request_layout(style, [], cx), ())
     }
 
     fn prepaint(
@@ -390,13 +391,14 @@ impl Element for TextElement {
         _id: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Self::PrepaintState {
         let input = self.input.read(cx);
         let content = input.content.clone();
         let selected_range = input.selected_range.clone();
         let cursor = input.cursor_offset();
-        let style = cx.text_style();
+        let style = window.text_style(cx);
 
         let (display_text, text_color) = if content.is_empty() {
             (input.placeholder.clone(), hsla(0., 0., 0., 0.2))
@@ -439,9 +441,9 @@ impl Element for TextElement {
             vec![run]
         };
 
-        let font_size = style.font_size.to_pixels(cx.rem_size());
-        let line = cx
-            .text_system()
+        let font_size = style.font_size.to_pixels(window.rem_size(cx));
+        let line = window
+            .text_system(cx)
             .shape_line(display_text, font_size, &runs)
             .unwrap();
 
@@ -488,22 +490,25 @@ impl Element for TextElement {
         bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         prepaint: &mut Self::PrepaintState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) {
         let focus_handle = self.input.read(cx).focus_handle.clone();
-        cx.handle_input(
+        window.handle_input(
             &focus_handle,
             ElementInputHandler::new(bounds, self.input.clone()),
+            cx,
         );
         if let Some(selection) = prepaint.selection.take() {
-            cx.paint_quad(selection)
+            window.paint_quad(selection, cx)
         }
         let line = prepaint.line.take().unwrap();
-        line.paint(bounds.origin, cx.line_height(), cx).unwrap();
+        line.paint(bounds.origin, window.line_height(cx), window, cx)
+            .unwrap();
 
-        if focus_handle.is_focused(cx) {
+        if focus_handle.is_focused(window, cx) {
             if let Some(cursor) = prepaint.cursor.take() {
-                cx.paint_quad(cursor);
+                window.paint_quad(cursor, cx);
             }
         }
 
@@ -653,8 +658,8 @@ fn main() {
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
                     ..Default::default()
                 },
-                |cx| {
-                    let text_input = cx.new_view(|cx| TextInput {
+                |window, cx| {
+                    let text_input = window.new_view(cx, |cx| TextInput {
                         focus_handle: cx.focus_handle(),
                         content: "".into(),
                         placeholder: "Type here...".into(),
@@ -665,7 +670,7 @@ fn main() {
                         last_bounds: None,
                         is_selecting: false,
                     });
-                    cx.new_view(|cx| InputExample {
+                    window.new_view(cx, |cx| InputExample {
                         text_input,
                         recent_keystrokes: vec![],
                         focus_handle: cx.focus_handle(),
@@ -673,7 +678,7 @@ fn main() {
                 },
             )
             .unwrap();
-        cx.observe_keystrokes(move |ev, cx| {
+        cx.observe_keystrokes(move |ev, _window, cx| {
             window
                 .update(cx, |view, cx| {
                     view.recent_keystrokes.push(ev.keystroke.clone());

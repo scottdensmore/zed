@@ -101,25 +101,27 @@ impl Render for Breadcrumbs {
                     .style(ButtonStyle::Transparent)
                     .on_click({
                         let editor = editor.clone();
-                        move |_, cx| {
+                        move |_, window, cx| {
                             if let Some(editor) = editor.upgrade() {
-                                outline::toggle(editor, &editor::actions::ToggleOutline, cx)
+                                outline::toggle(editor, &editor::actions::ToggleOutline, window, cx)
                             }
                         }
                     })
-                    .tooltip(move |cx| {
+                    .tooltip(move |window, cx| {
                         if let Some(editor) = editor.upgrade() {
                             let focus_handle = editor.read(cx).focus_handle(cx);
                             Tooltip::for_action_in(
                                 "Show Symbol Outline",
                                 &editor::actions::ToggleOutline,
                                 &focus_handle,
+                                window,
                                 cx,
                             )
                         } else {
                             Tooltip::for_action(
                                 "Show Symbol Outline",
                                 &editor::actions::ToggleOutline,
+                                window,
                                 cx,
                             )
                         }
@@ -149,7 +151,7 @@ impl ToolbarItemView for Breadcrumbs {
         let this = cx.view().downgrade();
         self.subscription = Some(item.subscribe_to_item_events(
             cx,
-            Box::new(move |event, cx| {
+            Box::new(move |event, _window, cx| {
                 if let ItemEvent::UpdateBreadcrumbs = event {
                     this.update(cx, |this, cx| {
                         cx.notify();

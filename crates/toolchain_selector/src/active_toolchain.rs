@@ -115,7 +115,7 @@ impl ActiveToolchain {
                     .update(&mut cx, |this, _| this.project().clone())
                     .ok()?;
                 let toolchains = cx
-                    .update(|cx| {
+                    .update(|_window, cx| {
                         project
                             .read(cx)
                             .available_toolchains(worktree_id, language_name, cx)
@@ -156,7 +156,9 @@ impl Render for ActiveToolchain {
                             });
                         }
                     }))
-                    .tooltip(move |cx| Tooltip::text(format!("Select {}", &term), cx)),
+                    .tooltip(move |window, cx| {
+                        Tooltip::text(format!("Select {}", &term), window, cx)
+                    }),
             )
         })
     }

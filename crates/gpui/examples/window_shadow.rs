@@ -30,22 +30,23 @@ impl Render for WindowShadow {
                     .bg(gpui::transparent_black())
                     .child(
                         canvas(
-                            |_bounds, cx| {
-                                cx.insert_hitbox(
+                            |_bounds, window, cx| {
+                                window.insert_hitbox(
                                     Bounds::new(
                                         point(px(0.0), px(0.0)),
-                                        cx.window_bounds().get_bounds().size,
+                                        window.window_bounds(cx).get_bounds().size,
                                     ),
                                     false,
+                                    cx,
                                 )
                             },
-                            move |_bounds, hitbox, cx| {
-                                let mouse = cx.mouse_position();
-                                let size = cx.window_bounds().get_bounds().size;
+                            move |_bounds, hitbox, window, cx| {
+                                let mouse = window.mouse_position(cx);
+                                let size = window.window_bounds(cx).get_bounds().size;
                                 let Some(edge) = resize_edge(mouse, shadow_size, size) else {
                                     return;
                                 };
-                                cx.set_cursor_style(
+                                window.set_cursor_style(
                                     match edge {
                                         ResizeEdge::Top | ResizeEdge::Bottom => {
                                             CursorStyle::ResizeUpDown
@@ -61,6 +62,7 @@ impl Render for WindowShadow {
                                         }
                                     },
                                     &hitbox,
+                                    cx,
                                 );
                             },
                         )
@@ -75,14 +77,14 @@ impl Render for WindowShadow {
                     .when(!tiling.bottom, |div| div.pb(shadow_size))
                     .when(!tiling.left, |div| div.pl(shadow_size))
                     .when(!tiling.right, |div| div.pr(shadow_size))
-                    .on_mouse_move(|_e, cx| cx.refresh())
-                    .on_mouse_down(MouseButton::Left, move |e, cx| {
-                        let size = cx.window_bounds().get_bounds().size;
+                    .on_mouse_move(|_e, window, cx| window.refresh(cx))
+                    .on_mouse_down(MouseButton::Left, move |e, window, cx| {
+                        let size = window.window_bounds(cx).get_bounds().size;
                         let pos = e.position;
 
                         match resize_edge(pos, shadow_size, size) {
-                            Some(edge) => cx.start_window_resize(edge),
-                            None => cx.start_window_move(),
+                            Some(edge) => window.start_window_resize(edge, cx),
+                            None => window.start_window_move(cx),
                         };
                     }),
             })
@@ -116,7 +118,7 @@ impl Render for WindowShadow {
                                 }])
                             }),
                     })
-                    .on_mouse_move(|_e, cx| {
+                    .on_mouse_move(|_e, _window, cx| {
                         cx.stop_propagation();
                     })
                     .bg(gpui::rgb(0xCCCCFF))
@@ -157,12 +159,15 @@ impl Render for WindowShadow {
                                         .map(|div| match decorations {
                                             Decorations::Server => div,
                                             Decorations::Client { .. } => div
-                                                .on_mouse_down(MouseButton::Left, |_e, cx| {
-                                                    cx.start_window_move();
-                                                })
-                                                .on_click(|e, cx| {
+                                                .on_mouse_down(
+                                                    MouseButton::Left,
+                                                    |_e, window, cx| {
+                                                        window.start_window_move(cx);
+                                                    },
+                                                )
+                                                .on_click(|e, window, cx| {
                                                     if e.down.button == MouseButton::Right {
-                                                        cx.show_window_menu(e.up.position);
+                                                        window.show_window_menu(e.up.position, cx);
                                                     }
                                                 })
                                                 .text_color(black())
@@ -208,8 +213,8 @@ fn main() {
                 window_decorations: Some(WindowDecorations::Client),
                 ..Default::default()
             },
-            |cx| {
-                cx.new_view(|cx| {
+            |window, cx| {
+                window.new_view(cx, |cx| {
                     cx.observe_window_appearance(|_, cx| {
                         cx.refresh();
                     })

@@ -238,7 +238,7 @@ async fn test_row_column_numbers_query_inside_file(cx: &mut TestAppContext) {
     cx.dispatch_action(SelectNext);
     cx.dispatch_action(Confirm);
 
-    let editor = cx.update(|cx| workspace.read(cx).active_item_as::<Editor>(cx).unwrap());
+    let editor = cx.update(|_window, cx| workspace.read(cx).active_item_as::<Editor>(cx).unwrap());
     cx.executor().advance_clock(Duration::from_secs(2));
 
     editor.update(cx, |editor, cx| {
@@ -313,7 +313,7 @@ async fn test_row_column_numbers_query_outside_file(cx: &mut TestAppContext) {
     cx.dispatch_action(SelectNext);
     cx.dispatch_action(Confirm);
 
-    let editor = cx.update(|cx| workspace.read(cx).active_item_as::<Editor>(cx).unwrap());
+    let editor = cx.update(|_window, cx| workspace.read(cx).active_item_as::<Editor>(cx).unwrap());
     cx.executor().advance_clock(Duration::from_secs(2));
 
     editor.update(cx, |editor, cx| {

@@ -142,8 +142,11 @@ impl MarkdownPreviewView {
         cx.new_view(|cx: &mut ViewContext<Self>| {
             let view = cx.view().downgrade();
 
-            let list_state =
-                ListState::new(0, gpui::ListAlignment::Top, px(1000.), move |ix, cx| {
+            let list_state = ListState::new(
+                0,
+                gpui::ListAlignment::Top,
+                px(1000.),
+                move |ix, _window, cx| {
                     if let Some(view) = view.upgrade() {
                         view.update(cx, |this, cx| {
                             let Some(contents) = &this.contents else {
@@ -154,7 +157,7 @@ impl MarkdownPreviewView {
                                 RenderContext::new(Some(this.workspace.clone()), cx)
                                     .with_checkbox_clicked_callback({
                                         let view = view.clone();
-                                        move |checked, source_range, cx| {
+                                        move |checked, source_range, _window, cx| {
                                             view.update(cx, |view, cx| {
                                                 if let Some(editor) = view
                                                     .active_editor
@@ -233,7 +236,8 @@ impl MarkdownPreviewView {
                     } else {
                         div().into_any()
                     }
-                });
+                },
+            );
 
             let mut this = Self {
                 selected_block: 0,
@@ -462,11 +466,11 @@ impl EventEmitter<PreviewEvent> for MarkdownPreviewView {}
 impl Item for MarkdownPreviewView {
     type Event = PreviewEvent;
 
-    fn tab_icon(&self, _cx: &WindowContext) -> Option<Icon> {
+    fn tab_icon(&self, _window: &Window, _cx: &AppContext) -> Option<Icon> {
         Some(Icon::new(IconName::FileDoc))
     }
 
-    fn tab_content_text(&self, _cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, _cx: &AppContext) -> Option<SharedString> {
         Some(if let Some(description) = &self.tab_description {
             description.clone().into()
         } else {

@@ -17,10 +17,11 @@ impl AssistantModelSelector {
     pub(crate) fn new(
         fs: Arc<dyn Fs>,
         menu_handle: PopoverMenuHandle<LanguageModelSelector>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Self {
         Self {
-            selector: cx.new_view(|cx| {
+            selector: window.new_view(cx, |cx| {
                 let fs = fs.clone();
                 LanguageModelSelector::new(
                     move |model, cx| {
@@ -76,8 +77,14 @@ impl Render for AssistantModelSelector {
                                 .size(IconSize::XSmall),
                         ),
                 )
-                .tooltip(move |cx| {
-                    Tooltip::for_action_in("Change Model", &ToggleModelSelector, &focus_handle, cx)
+                .tooltip(move |window, cx| {
+                    Tooltip::for_action_in(
+                        "Change Model",
+                        &ToggleModelSelector,
+                        &focus_handle,
+                        window,
+                        cx,
+                    )
                 }),
         )
         .with_handle(self.menu_handle.clone())

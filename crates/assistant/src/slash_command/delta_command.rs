@@ -6,7 +6,7 @@ use assistant_slash_command::{
 };
 use collections::HashSet;
 use futures::future;
-use gpui::{Task, WeakView, WindowContext};
+use gpui::{AppContext, Task, WeakView, Window};
 use language::{BufferSnapshot, LspAdapterDelegate};
 use std::sync::{atomic::AtomicBool, Arc};
 use text::OffsetRangeExt;
@@ -41,7 +41,8 @@ impl SlashCommand for DeltaSlashCommand {
         _arguments: &[String],
         _cancellation_flag: Arc<AtomicBool>,
         _workspace: Option<WeakView<Workspace>>,
-        _cx: &mut WindowContext,
+        _window: &mut Window,
+        _cx: &mut AppContext,
     ) -> Task<Result<Vec<ArgumentCompletion>>> {
         Task::ready(Err(anyhow!("this command does not require argument")))
     }
@@ -53,7 +54,8 @@ impl SlashCommand for DeltaSlashCommand {
         context_buffer: BufferSnapshot,
         workspace: WeakView<Workspace>,
         delegate: Option<Arc<dyn LspAdapterDelegate>>,
-        cx: &mut WindowContext,
+        _window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<SlashCommandResult> {
         let mut paths = HashSet::default();
         let mut file_command_old_outputs = Vec::new();
@@ -77,6 +79,7 @@ impl SlashCommand for DeltaSlashCommand {
                         context_buffer.clone(),
                         workspace.clone(),
                         delegate.clone(),
+                        // REFACTOR ERROR Parameter _delegate: Option<Arc<dyn LspAdapterDelegate>> contains neither WindowContext or AppContext. Signature: fn run(self: Arc<Self>, arguments: &[String], _context_slash_command_output_sections: &[SlashCommandOutputSection<language::Anchor>], _context_buffer: BufferSnapshot, workspace: WeakView<Workspace>, _delegate: Option<Arc<dyn LspAdapterDelegate>>, cx: &mut WindowContext) -> Task<SlashCommandResult>;
                         cx,
                     ));
                 }

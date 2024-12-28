@@ -29,8 +29,8 @@ fn main() {
             name: "set_menus".into(),
             items: vec![MenuItem::action("Quit", Quit)],
         }]);
-        cx.open_window(WindowOptions::default(), |cx| {
-            cx.new_view(|_cx| SetMenus {})
+        cx.open_window(WindowOptions::default(), |window, cx| {
+            window.new_view(cx, |_cx| SetMenus {})
         })
         .unwrap();
     });

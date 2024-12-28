@@ -1,7 +1,7 @@
 use crate::ItemHandle;
 use gpui::{
-    AnyView, Entity, EntityId, EventEmitter, ParentElement as _, Render, Styled, View, ViewContext,
-    WindowContext,
+    AnyView, AppContext, Entity, EntityId, EventEmitter, ParentElement as _, Render, Styled, View,
+    ViewContext, Window,
 };
 use ui::prelude::*;
 use ui::{h_flex, v_flex};
@@ -26,9 +26,10 @@ trait ToolbarItemViewHandle: Send {
     fn set_active_pane_item(
         &self,
         active_pane_item: Option<&dyn ItemHandle>,
-        cx: &mut WindowContext,
+        _window: &mut Window,
+        cx: &mut AppContext,
     ) -> ToolbarItemLocation;
-    fn focus_changed(&mut self, pane_focused: bool, cx: &mut WindowContext);
+    fn focus_changed(&mut self, pane_focused: bool, _window: &mut Window, cx: &mut AppContext);
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -234,14 +235,15 @@ impl<T: ToolbarItemView> ToolbarItemViewHandle for View<T> {
     fn set_active_pane_item(
         &self,
         active_pane_item: Option<&dyn ItemHandle>,
-        cx: &mut WindowContext,
+        _window: &mut Window,
+        cx: &mut AppContext,
     ) -> ToolbarItemLocation {
         self.update(cx, |this, cx| {
             this.set_active_pane_item(active_pane_item, cx)
         })
     }
 
-    fn focus_changed(&mut self, pane_focused: bool, cx: &mut WindowContext) {
+    fn focus_changed(&mut self, pane_focused: bool, _window: &mut Window, cx: &mut AppContext) {
         self.update(cx, |this, cx| {
             this.pane_focus_update(pane_focused, cx);
             cx.notify();

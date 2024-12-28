@@ -169,16 +169,16 @@ impl EventEmitter<DismissEvent> for RecentProjectsDelegate {}
 impl PickerDelegate for RecentProjectsDelegate {
     type ListItem = ListItem;
 
-    fn placeholder_text(&self, cx: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, window: &mut Window, cx: &mut AppContext) -> Arc<str> {
         let (create_window, reuse_window) = if self.create_new_window {
             (
-                cx.keystroke_text_for(&menu::Confirm),
-                cx.keystroke_text_for(&menu::SecondaryConfirm),
+                window.keystroke_text_for(&menu::Confirm, cx),
+                window.keystroke_text_for(&menu::SecondaryConfirm, cx),
             )
         } else {
             (
-                cx.keystroke_text_for(&menu::SecondaryConfirm),
-                cx.keystroke_text_for(&menu::Confirm),
+                window.keystroke_text_for(&menu::SecondaryConfirm, cx),
+                window.keystroke_text_for(&menu::Confirm, cx),
             )
         };
         Arc::from(format!(
@@ -345,7 +345,7 @@ impl PickerDelegate for RecentProjectsDelegate {
 
     fn dismissed(&mut self, _: &mut ViewContext<Picker<Self>>) {}
 
-    fn no_matches_text(&self, _cx: &mut WindowContext) -> SharedString {
+    fn no_matches_text(&self, _window: &mut Window, _cx: &mut AppContext) -> SharedString {
         if self.workspaces.is_empty() {
             "Recently opened projects will show up here".into()
         } else {
@@ -433,7 +433,9 @@ impl PickerDelegate for RecentProjectsDelegate {
 
                                     this.delegate.delete_recent_project(ix, cx)
                                 }))
-                                .tooltip(|cx| Tooltip::text("Delete from Recent Projects...", cx)),
+                                .tooltip(|window, cx| {
+                                    Tooltip::text("Delete from Recent Projects...", window, cx)
+                                }),
                         )
                         .into_any_element();
 
@@ -443,12 +445,13 @@ impl PickerDelegate for RecentProjectsDelegate {
                         el.end_hover_slot::<AnyElement>(delete_button)
                     }
                 })
-                .tooltip(move |cx| {
+                .tooltip(move |window, cx| {
                     let tooltip_highlighted_location = highlighted_match.clone();
-                    cx.new_view(move |_| MatchTooltip {
-                        highlighted_location: tooltip_highlighted_location,
-                    })
-                    .into()
+                    window
+                        .new_view(cx, move |_| MatchTooltip {
+                            highlighted_location: tooltip_highlighted_location,
+                        })
+                        .into()
                 }),
         )
     }
@@ -465,12 +468,16 @@ impl PickerDelegate for RecentProjectsDelegate {
                 .child(
                     Button::new("remote", "Open Remote Folder")
                         .key_binding(KeyBinding::for_action(&OpenRemote, cx))
-                        .on_click(|_, cx| cx.dispatch_action(OpenRemote.boxed_clone())),
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(OpenRemote.boxed_clone(), cx)
+                        }),
                 )
                 .child(
                     Button::new("local", "Open Local Folder")
                         .key_binding(KeyBinding::for_action(&workspace::Open, cx))
-                        .on_click(|_, cx| cx.dispatch_action(workspace::Open.boxed_clone())),
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(workspace::Open.boxed_clone(), cx)
+                        }),
                 )
                 .into_any(),
         )

@@ -1013,14 +1013,14 @@ mod tests {
         let mut cx = EditorTestContext::new(cx).await;
         let editor = cx.editor.clone();
         let window = cx.window;
-        _ = cx.update_window(window, |_, cx| {
+        _ = cx.update_window(window, |_, window, cx| {
             let text_layout_details =
                 editor.update(cx, |editor, cx| editor.text_layout_details(cx));
 
             let font = font("Helvetica");
 
-            let buffer = cx.new_model(|cx| Buffer::local("abc\ndefg\nhijkl\nmn", cx));
-            let multibuffer = cx.new_model(|cx| {
+            let buffer = window.new_model(cx, |cx| Buffer::local("abc\ndefg\nhijkl\nmn", cx));
+            let multibuffer = window.new_model(cx, |cx| {
                 let mut multibuffer = MultiBuffer::new(Capability::ReadWrite);
                 multibuffer.push_excerpts(
                     buffer.clone(),
@@ -1038,7 +1038,7 @@ mod tests {
                 );
                 multibuffer
             });
-            let display_map = cx.new_model(|cx| {
+            let display_map = window.new_model(cx, |cx| {
                 DisplayMap::new(
                     multibuffer,
                     font,

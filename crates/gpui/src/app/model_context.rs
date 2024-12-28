@@ -1,7 +1,6 @@
 use crate::{
     AnyView, AnyWindowHandle, AppContext, AsyncAppContext, Context, Effect, Entity, EntityId,
-    EventEmitter, Model, Reservation, Subscription, Task, View, WeakModel, WindowContext,
-    WindowHandle,
+    EventEmitter, Model, Reservation, Subscription, Task, View, WeakModel, Window, WindowHandle,
 };
 use anyhow::Result;
 use derive_more::{Deref, DerefMut};
@@ -263,7 +262,7 @@ impl<'a, T> Context for ModelContext<'a, T> {
 
     fn update_window<R, F>(&mut self, window: AnyWindowHandle, update: F) -> Result<R>
     where
-        F: FnOnce(AnyView, &mut WindowContext) -> R,
+        F: FnOnce(AnyView, &mut Window, &mut AppContext) -> R,
     {
         self.app.update_window(window, update)
     }

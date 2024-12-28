@@ -125,9 +125,9 @@ impl Render for TitleBar {
                     .w_full()
                     // Note: On Windows the title bar behavior is handled by the platform implementation.
                     .when(self.platform_style != PlatformStyle::Windows, |this| {
-                        this.on_click(|event, cx| {
+                        this.on_click(|event, window, cx| {
                             if event.up.click_count == 2 {
-                                cx.zoom_window();
+                                window.zoom_window(cx);
                             }
                         })
                     })
@@ -148,14 +148,18 @@ impl Render for TitleBar {
                                             .children(self.render_project_branch(cx))
                                     })
                             })
-                            .on_mouse_down(MouseButton::Left, |_, cx| cx.stop_propagation()),
+                            .on_mouse_down(MouseButton::Left, |_, _window, cx| {
+                                cx.stop_propagation()
+                            }),
                     )
                     .child(self.render_collaborator_list(cx))
                     .child(
                         h_flex()
                             .gap_1()
                             .pr_1()
-                            .on_mouse_down(MouseButton::Left, |_, cx| cx.stop_propagation())
+                            .on_mouse_down(MouseButton::Left, |_, _window, cx| {
+                                cx.stop_propagation()
+                            })
                             .children(self.render_call_controls(cx))
                             .map(|el| {
                                 let status = self.client.status();
@@ -177,9 +181,10 @@ impl Render for TitleBar {
                         title_bar
                             .child(platform_linux::LinuxWindowControls::new(close_action))
                             .when(supported_controls.window_menu, |titlebar| {
-                                titlebar.on_mouse_down(gpui::MouseButton::Right, move |ev, cx| {
-                                    cx.show_window_menu(ev.position)
-                                })
+                                titlebar.on_mouse_down(
+                                    gpui::MouseButton::Right,
+                                    move |ev, window, cx| window.show_window_menu(ev.position, cx),
+                                )
                             })
                             .on_mouse_move(cx.listener(move |this, _ev, cx| {
                                 if this.should_move {
@@ -264,8 +269,8 @@ impl TitleBar {
     }
 
     #[cfg(not(target_os = "windows"))]
-    pub fn height(cx: &mut WindowContext) -> Pixels {
-        (1.75 * cx.rem_size()).max(px(34.))
+    pub fn height(window: &mut Window, cx: &mut AppContext) -> Pixels {
+        (1.75 * window.rem_size(cx)).max(px(34.))
     }
 
     #[cfg(target_os = "windows")]
@@ -338,11 +343,17 @@ impl TitleBar {
                                 .text_ellipsis(),
                         ),
                 )
-                .tooltip(move |cx| {
-                    Tooltip::with_meta("Remote Project", Some(&OpenRemote), meta.clone(), cx)
+                .tooltip(move |window, cx| {
+                    Tooltip::with_meta(
+                        "Remote Project",
+                        Some(&OpenRemote),
+                        meta.clone(),
+                        window,
+                        cx,
+                    )
                 })
-                .on_click(|_, cx| {
-                    cx.dispatch_action(OpenRemote.boxed_clone());
+                .on_click(|_, window, cx| {
+                    window.dispatch_action(OpenRemote.boxed_clone(), cx);
                 })
                 .into_any_element(),
         )
@@ -376,12 +387,13 @@ impl TitleBar {
                 .color(Color::Player(participant_index.0))
                 .style(ButtonStyle::Subtle)
                 .label_size(LabelSize::Small)
-                .tooltip(move |cx| {
+                .tooltip(move |window, cx| {
                     Tooltip::text(
                         format!(
                             "{} is sharing this project. Click to follow.",
                             host_user.github_login.clone()
                         ),
+                        window,
                         cx,
                     )
                 })
@@ -419,12 +431,13 @@ impl TitleBar {
             .when(!is_project_selected, |b| b.color(Color::Muted))
             .style(ButtonStyle::Subtle)
             .label_size(LabelSize::Small)
-            .tooltip(move |cx| {
+            .tooltip(move |window, cx| {
                 Tooltip::for_action(
                     "Recent Projects",
                     &zed_actions::OpenRecent {
                         create_new_window: false,
                     },
+                    window,
                     cx,
                 )
             })
@@ -458,15 +471,16 @@ impl TitleBar {
                 .color(Color::Muted)
                 .style(ButtonStyle::Subtle)
                 .label_size(LabelSize::Small)
-                .tooltip(move |cx| {
+                .tooltip(move |window, cx| {
                     Tooltip::with_meta(
                         "Recent Branches",
                         Some(&zed_actions::branches::OpenRecent),
                         "Local branches only",
+                        window,
                         cx,
                     )
                 })
-                .on_click(move |_, cx| {
+                .on_click(move |_, _window, cx| {
                     let _ = workspace.update(cx, |_this, cx| {
                         cx.dispatch_action(zed_actions::branches::OpenRecent.boxed_clone());
                     });
@@ -525,7 +539,7 @@ impl TitleBar {
                 div()
                     .id("disconnected")
                     .child(Icon::new(IconName::Disconnected).size(IconSize::Small))
-                    .tooltip(|cx| Tooltip::text("Disconnected", cx))
+                    .tooltip(|window, cx| Tooltip::text("Disconnected", window, cx))
                     .into_any_element(),
             ),
             client::Status::UpgradeRequired => {
@@ -543,14 +557,14 @@ impl TitleBar {
                 Some(
                     Button::new("connection-status", label)
                         .label_size(LabelSize::Small)
-                        .on_click(|_, cx| {
+                        .on_click(|_, window, cx| {
                             if let Some(auto_updater) = auto_update::AutoUpdater::get(cx) {
                                 if auto_updater.read(cx).status().is_updated() {
                                     workspace::reload(&Default::default(), cx);
                                     return;
                                 }
                             }
-                            auto_update::check(&Default::default(), cx);
+                            auto_update::check(&Default::default(), window, cx);
                         })
                         .into_any_element(),
                 )
@@ -563,15 +577,16 @@ impl TitleBar {
         let client = self.client.clone();
         Button::new("sign_in", "Sign in")
             .label_size(LabelSize::Small)
-            .on_click(move |_, cx| {
+            .on_click(move |_, window, cx| {
                 let client = client.clone();
-                cx.spawn(move |mut cx| async move {
-                    client
-                        .authenticate_and_connect(true, &cx)
-                        .await
-                        .notify_async_err(&mut cx);
-                })
-                .detach();
+                window
+                    .spawn(cx, move |mut cx| async move {
+                        client
+                            .authenticate_and_connect(true, &cx)
+                            .await
+                            .notify_async_err(&mut cx);
+                    })
+                    .detach();
             })
     }
 
@@ -580,8 +595,8 @@ impl TitleBar {
         if let Some(user) = user_store.current_user() {
             let plan = user_store.current_plan();
             PopoverMenu::new("user-menu")
-                .menu(move |cx| {
-                    ContextMenu::build(cx, |menu, cx| {
+                .menu(move |window, cx| {
+                    ContextMenu::build(window, cx, |menu, cx| {
                         menu.when(cx.has_flag::<ZedPro>(), |menu| {
                             menu.action(
                                 format!(
@@ -632,13 +647,13 @@ impl TitleBar {
                                 ),
                         )
                         .style(ButtonStyle::Subtle)
-                        .tooltip(move |cx| Tooltip::text("Toggle User Menu", cx)),
+                        .tooltip(move |window, cx| Tooltip::text("Toggle User Menu", window, cx)),
                 )
                 .anchor(gpui::Corner::TopRight)
         } else {
             PopoverMenu::new("user-menu")
-                .menu(|cx| {
-                    ContextMenu::build(cx, |menu, _| {
+                .menu(|window, cx| {
+                    ContextMenu::build(window, cx, |menu, _| {
                         menu.action("Settings", zed_actions::OpenSettings.boxed_clone())
                             .action("Key Bindings", Box::new(zed_actions::OpenKeymap))
                             .action(
@@ -667,7 +682,7 @@ impl TitleBar {
                             ),
                         )
                         .style(ButtonStyle::Subtle)
-                        .tooltip(move |cx| Tooltip::text("Toggle User Menu", cx)),
+                        .tooltip(move |window, cx| Tooltip::text("Toggle User Menu", window, cx)),
                 )
         }
     }

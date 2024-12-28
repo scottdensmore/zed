@@ -82,10 +82,10 @@ impl QuickActionBar {
 
         let editor = editor.downgrade();
         let dropdown_menu = PopoverMenu::new(element_id("menu"))
-            .menu(move |cx| {
+            .menu(move |window, cx| {
                 let editor = editor.clone();
                 let session = session.clone();
-                ContextMenu::build(cx, move |menu, cx| {
+                ContextMenu::build(window, cx, move |menu, cx| {
                     let menu_state = session_state(session, cx);
                     let status = menu_state.status;
                     let editor = editor.clone();
@@ -93,7 +93,7 @@ impl QuickActionBar {
                     menu.map(|menu| {
                         if status.is_connected() {
                             let status = status.clone();
-                            menu.custom_row(move |_cx| {
+                            menu.custom_row(move |_window, _cx| {
                                 h_flex()
                                     .child(
                                         Label::new(format!(
@@ -106,7 +106,7 @@ impl QuickActionBar {
                                     )
                                     .into_any_element()
                             })
-                            .custom_row(move |_cx| {
+                            .custom_row(move |_window, _cx| {
                                 h_flex()
                                     .child(
                                         Label::new(status.clone().to_string())
@@ -117,7 +117,7 @@ impl QuickActionBar {
                             })
                         } else {
                             let status = status.clone();
-                            menu.custom_row(move |_cx| {
+                            menu.custom_row(move |_window, _cx| {
                                 h_flex()
                                     .child(
                                         Label::new(format!("{}...", status.clone().to_string()))
@@ -130,7 +130,7 @@ impl QuickActionBar {
                     })
                     .separator()
                     .custom_entry(
-                        move |_cx| {
+                        move |_window, _cx| {
                             Label::new(if has_nonempty_selection {
                                 "Run Selection"
                             } else {
@@ -140,13 +140,13 @@ impl QuickActionBar {
                         },
                         {
                             let editor = editor.clone();
-                            move |cx| {
-                                repl::run(editor.clone(), true, cx).log_err();
+                            move |window, cx| {
+                                repl::run(editor.clone(), true, window, cx).log_err();
                             }
                         },
                     )
                     .custom_entry(
-                        move |_cx| {
+                        move |_window, _cx| {
                             Label::new("Interrupt")
                                 .size(LabelSize::Small)
                                 .color(Color::Error)
@@ -154,13 +154,13 @@ impl QuickActionBar {
                         },
                         {
                             let editor = editor.clone();
-                            move |cx| {
-                                repl::interrupt(editor.clone(), cx);
+                            move |window, cx| {
+                                repl::interrupt(editor.clone(), window, cx);
                             }
                         },
                     )
                     .custom_entry(
-                        move |_cx| {
+                        move |_window, _cx| {
                             Label::new("Clear Outputs")
                                 .size(LabelSize::Small)
                                 .color(Color::Muted)
@@ -168,14 +168,14 @@ impl QuickActionBar {
                         },
                         {
                             let editor = editor.clone();
-                            move |cx| {
-                                repl::clear_outputs(editor.clone(), cx);
+                            move |window, cx| {
+                                repl::clear_outputs(editor.clone(), window, cx);
                             }
                         },
                     )
                     .separator()
                     .custom_entry(
-                        move |_cx| {
+                        move |_window, _cx| {
                             Label::new("Shut Down Kernel")
                                 .size(LabelSize::Small)
                                 .color(Color::Error)
@@ -183,13 +183,13 @@ impl QuickActionBar {
                         },
                         {
                             let editor = editor.clone();
-                            move |cx| {
-                                repl::shutdown(editor.clone(), cx);
+                            move |window, cx| {
+                                repl::shutdown(editor.clone(), window, cx);
                             }
                         },
                     )
                     .custom_entry(
-                        move |_cx| {
+                        move |_window, _cx| {
                             Label::new("Restart Kernel")
                                 .size(LabelSize::Small)
                                 .color(Color::Error)
@@ -197,8 +197,8 @@ impl QuickActionBar {
                         },
                         {
                             let editor = editor.clone();
-                            move |cx| {
-                                repl::restart(editor.clone(), cx);
+                            move |window, cx| {
+                                repl::restart(editor.clone(), window, cx);
                             }
                         },
                     )
@@ -216,7 +216,7 @@ impl QuickActionBar {
                             .size(IconSize::XSmall)
                             .color(Color::Muted),
                     )
-                    .tooltip(move |cx| Tooltip::text("REPL Menu", cx))
+                    .tooltip(move |window, cx| Tooltip::text("REPL Menu", window, cx))
                     .width(rems(1.).into())
                     .disabled(menu_state.popover_disabled),
             );
@@ -241,8 +241,8 @@ impl QuickActionBar {
             })
             .size(ButtonSize::Compact)
             .style(ButtonStyle::Subtle)
-            .tooltip(move |cx| Tooltip::text(menu_state.tooltip.clone(), cx))
-            .on_click(|_, cx| cx.dispatch_action(Box::new(repl::Run {})))
+            .tooltip(move |window, cx| Tooltip::text(menu_state.tooltip.clone(), window, cx))
+            .on_click(|_, window, cx| window.dispatch_action(Box::new(repl::Run {}), cx))
             .into_any_element();
 
         Some(
@@ -269,8 +269,10 @@ impl QuickActionBar {
                         .size(ButtonSize::Compact)
                         .icon_color(Color::Muted)
                         .style(ButtonStyle::Subtle)
-                        .tooltip(move |cx| Tooltip::text(tooltip.clone(), cx))
-                        .on_click(|_, cx| cx.dispatch_action(Box::new(repl::Run {}))),
+                        .tooltip(move |window, cx| Tooltip::text(tooltip.clone(), window, cx))
+                        .on_click(|_, window, cx| {
+                            window.dispatch_action(Box::new(repl::Run {}), cx)
+                        }),
                 )
                 .into_any_element(),
         )
@@ -302,8 +304,8 @@ impl QuickActionBar {
             PopoverMenuHandle::default();
         KernelSelector::new(
             {
-                Box::new(move |kernelspec, cx| {
-                    repl::assign_kernelspec(kernelspec, editor.downgrade(), cx).ok();
+                Box::new(move |kernelspec, window, cx| {
+                    repl::assign_kernelspec(kernelspec, editor.downgrade(), window, cx).ok();
                 })
             },
             worktree_id,
@@ -339,7 +341,7 @@ impl QuickActionBar {
                                 .size(IconSize::XSmall),
                         ),
                 )
-                .tooltip(move |cx| Tooltip::text("Select Kernel", cx)),
+                .tooltip(move |window, cx| Tooltip::text("Select Kernel", window, cx)),
         )
         .with_handle(menu_handle.clone())
         .into_any_element()
@@ -360,8 +362,8 @@ impl QuickActionBar {
                         .size(ButtonSize::Compact)
                         .icon_color(Color::Muted)
                         .style(ButtonStyle::Subtle)
-                        .tooltip(move |cx| Tooltip::text(tooltip.clone(), cx))
-                        .on_click(|_, cx| {
+                        .tooltip(move |window, cx| Tooltip::text(tooltip.clone(), window, cx))
+                        .on_click(|_, _window, cx| {
                             cx.open_url(&format!("{}#installation", ZED_REPL_DOCUMENTATION))
                         }),
                 )
@@ -370,7 +372,7 @@ impl QuickActionBar {
     }
 }
 
-fn session_state(session: View<Session>, cx: &WindowContext) -> ReplMenuState {
+fn session_state(session: View<Session>, _window: &Window, cx: &AppContext) -> ReplMenuState {
     let session = session.read(cx);
 
     let kernel_name = session.kernel_specification.name();

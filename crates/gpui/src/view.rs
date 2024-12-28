@@ -102,10 +102,11 @@ impl<V: Render> Element for View<V> {
     fn request_layout(
         &mut self,
         _id: Option<&GlobalElementId>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut element = self.update(cx, |view, cx| view.render(cx).into_any_element());
-        let layout_id = element.request_layout(cx);
+        let layout_id = element.request_layout(window, cx);
         (layout_id, element)
     }
 
@@ -114,10 +115,11 @@ impl<V: Render> Element for View<V> {
         _id: Option<&GlobalElementId>,
         _: Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) {
-        cx.set_view_id(self.entity_id());
-        element.prepaint(cx);
+        window.set_view_id(self.entity_id(), cx);
+        element.prepaint(window, cx);
     }
 
     fn paint(
@@ -126,9 +128,10 @@ impl<V: Render> Element for View<V> {
         _: Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) {
-        element.paint(cx);
+        element.paint(window, cx);
     }
 }
 
@@ -226,7 +229,7 @@ impl<V> Eq for WeakView<V> {}
 #[derive(Clone, Debug)]
 pub struct AnyView {
     model: AnyModel,
-    render: fn(&AnyView, &mut WindowContext) -> AnyElement,
+    render: fn(&AnyView, &mut Window, &mut AppContext) -> AnyElement,
     cached_style: Option<StyleRefinement>,
 }
 
@@ -300,16 +303,17 @@ impl Element for AnyView {
     fn request_layout(
         &mut self,
         _id: Option<&GlobalElementId>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> (LayoutId, Self::RequestLayoutState) {
         if let Some(style) = self.cached_style.as_ref() {
             let mut root_style = Style::default();
             root_style.refine(style);
-            let layout_id = cx.request_layout(root_style, None);
+            let layout_id = window.request_layout(root_style, None, cx);
             (layout_id, None)
         } else {
-            let mut element = (self.render)(self, cx);
-            let layout_id = element.request_layout(cx);
+            let mut element = (self.render)(self, window, cx);
+            let layout_id = element.request_layout(window, cx);
             (layout_id, Some(element))
         }
     }
@@ -319,53 +323,58 @@ impl Element for AnyView {
         global_id: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         element: &mut Self::RequestLayoutState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Option<AnyElement> {
-        cx.set_view_id(self.entity_id());
+        window.set_view_id(self.entity_id(), cx);
         if self.cached_style.is_some() {
-            cx.with_element_state::<AnyViewState, _>(global_id.unwrap(), |element_state, cx| {
-                let content_mask = cx.content_mask();
-                let text_style = cx.text_style();
+            window.with_element_state::<AnyViewState, _>(
+                global_id.unwrap(),
+                cx,
+                |element_state, window, cx| {
+                    let content_mask = window.content_mask(cx);
+                    let text_style = window.text_style(cx);
 
-                if let Some(mut element_state) = element_state {
-                    if element_state.cache_key.bounds == bounds
-                        && element_state.cache_key.content_mask == content_mask
-                        && element_state.cache_key.text_style == text_style
-                        && !cx.window.dirty_views.contains(&self.entity_id())
-                        && !cx.window.refreshing
-                    {
-                        let prepaint_start = cx.prepaint_index();
-                        cx.reuse_prepaint(element_state.prepaint_range.clone());
-                        let prepaint_end = cx.prepaint_index();
-                        element_state.prepaint_range = prepaint_start..prepaint_end;
-                        return (None, element_state);
+                    if let Some(mut element_state) = element_state {
+                        if element_state.cache_key.bounds == bounds
+                            && element_state.cache_key.content_mask == content_mask
+                            && element_state.cache_key.text_style == text_style
+                            && !window.contains(&self.entity_id())
+                            && !window
+                        {
+                            let prepaint_start = window.prepaint_index(cx);
+                            window.reuse_prepaint(element_state.prepaint_range.clone(), cx);
+                            let prepaint_end = window.prepaint_index(cx);
+                            element_state.prepaint_range = prepaint_start..prepaint_end;
+                            return (None, element_state);
+                        }
                     }
-                }
 
-                let refreshing = mem::replace(&mut cx.window.refreshing, true);
-                let prepaint_start = cx.prepaint_index();
-                let mut element = (self.render)(self, cx);
-                element.layout_as_root(bounds.size.into(), cx);
-                element.prepaint_at(bounds.origin, cx);
-                let prepaint_end = cx.prepaint_index();
-                cx.window.refreshing = refreshing;
+                    let refreshing = mem::replace(&mut window, true);
+                    let prepaint_start = window.prepaint_index(cx);
+                    let mut element = (self.render)(self, window, cx);
+                    element.layout_as_root(bounds.size.into(), window, cx);
+                    element.prepaint_at(bounds.origin, window, cx);
+                    let prepaint_end = window.prepaint_index(cx);
+                    window = refreshing;
 
-                (
-                    Some(element),
-                    AnyViewState {
-                        prepaint_range: prepaint_start..prepaint_end,
-                        paint_range: PaintIndex::default()..PaintIndex::default(),
-                        cache_key: ViewCacheKey {
-                            bounds,
-                            content_mask,
-                            text_style,
+                    (
+                        Some(element),
+                        AnyViewState {
+                            prepaint_range: prepaint_start..prepaint_end,
+                            paint_range: PaintIndex::default()..PaintIndex::default(),
+                            cache_key: ViewCacheKey {
+                                bounds,
+                                content_mask,
+                                text_style,
+                            },
                         },
-                    },
-                )
-            })
+                    )
+                },
+            )
         } else {
             let mut element = element.take().unwrap();
-            element.prepaint(cx);
+            element.prepaint(window, cx);
             Some(element)
         }
     }
@@ -376,29 +385,34 @@ impl Element for AnyView {
         _bounds: Bounds<Pixels>,
         _: &mut Self::RequestLayoutState,
         element: &mut Self::PrepaintState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) {
         if self.cached_style.is_some() {
-            cx.with_element_state::<AnyViewState, _>(global_id.unwrap(), |element_state, cx| {
-                let mut element_state = element_state.unwrap();
+            window.with_element_state::<AnyViewState, _>(
+                global_id.unwrap(),
+                cx,
+                |element_state, window, cx| {
+                    let mut element_state = element_state.unwrap();
 
-                let paint_start = cx.paint_index();
+                    let paint_start = window.paint_index(cx);
 
-                if let Some(element) = element {
-                    let refreshing = mem::replace(&mut cx.window.refreshing, true);
-                    element.paint(cx);
-                    cx.window.refreshing = refreshing;
-                } else {
-                    cx.reuse_paint(element_state.paint_range.clone());
-                }
+                    if let Some(element) = element {
+                        let refreshing = mem::replace(&mut window, true);
+                        element.paint(window, cx);
+                        window = refreshing;
+                    } else {
+                        window.reuse_paint(element_state.paint_range.clone(), cx);
+                    }
 
-                let paint_end = cx.paint_index();
-                element_state.paint_range = paint_start..paint_end;
+                    let paint_end = window.paint_index(cx);
+                    element_state.paint_range = paint_start..paint_end;
 
-                ((), element_state)
-            })
+                    ((), element_state)
+                },
+            )
         } else {
-            element.as_mut().unwrap().paint(cx);
+            element.as_mut().unwrap().paint(window, cx);
         }
     }
 }
@@ -422,7 +436,7 @@ impl IntoElement for AnyView {
 /// A weak, dynamically-typed view handle that does not prevent the view from being released.
 pub struct AnyWeakView {
     model: AnyWeakModel,
-    render: fn(&AnyView, &mut WindowContext) -> AnyElement,
+    render: fn(&AnyView, &mut Window, &mut AppContext) -> AnyElement,
 }
 
 impl AnyWeakView {
@@ -461,11 +475,12 @@ impl std::fmt::Debug for AnyWeakView {
 }
 
 mod any_view {
-    use crate::{AnyElement, AnyView, IntoElement, Render, WindowContext};
+    use crate::{AnyElement, AnyView, IntoElement, Render, Window};
 
     pub(crate) fn render<V: 'static + Render>(
         view: &AnyView,
-        cx: &mut WindowContext,
+        _window: &mut Window,
+        cx: &mut AppContext,
     ) -> AnyElement {
         let view = view.clone().downcast::<V>().unwrap();
         view.update(cx, |view, cx| view.render(cx).into_any_element())

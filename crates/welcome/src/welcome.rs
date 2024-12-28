@@ -7,7 +7,7 @@ use db::kvp::KEY_VALUE_STORE;
 use gpui::{
     actions, svg, Action, AppContext, EventEmitter, FocusHandle, FocusableView, InteractiveElement,
     ParentElement, Render, Styled, Subscription, Task, View, ViewContext, VisualContext, WeakView,
-    WindowContext,
+    Window,
 };
 use settings::{Settings, SettingsStore};
 use std::sync::Arc;
@@ -291,7 +291,7 @@ impl Render for WelcomePage {
                                         IconButton::new("vim-mode", IconName::Info)
                                             .icon_size(IconSize::XSmall)
                                             .icon_color(Color::Muted)
-                                            .tooltip(|cx| Tooltip::text("You can also toggle Vim Mode via the command palette or Editor Controls menu.", cx)),
+                                            .tooltip(|window, cx| Tooltip::text("You can also toggle Vim Mode via the command palette or Editor Controls menu.", window, cx)),
                                     )
                             )
                             .child(CheckboxWithLabel::new(
@@ -361,11 +361,11 @@ impl WelcomePage {
         this
     }
 
-    fn section_label(&self, cx: &WindowContext) -> Div {
+    fn section_label(&self, window: &Window, cx: &AppContext) -> Div {
         div()
             .pl_1()
-            .font_buffer(cx)
-            .text_color(Color::Muted.color(cx))
+            .font_buffer(window, cx)
+            .text_color(Color::Muted.color(window, cx))
     }
 
     fn update_settings<T: Settings>(
@@ -401,7 +401,7 @@ impl FocusableView for WelcomePage {
 impl Item for WelcomePage {
     type Event = ItemEvent;
 
-    fn tab_content_text(&self, _cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, _cx: &AppContext) -> Option<SharedString> {
         Some("Welcome".into())
     }
 

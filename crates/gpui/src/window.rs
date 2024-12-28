@@ -84,10 +84,10 @@ impl DispatchPhase {
     }
 }
 
-type AnyObserver = Box<dyn FnMut(&mut WindowContext) -> bool + 'static>;
+type AnyObserver = Box<dyn FnMut(&mut Window, &mut AppContext) -> bool + 'static>;
 
 type AnyWindowFocusListener =
-    Box<dyn FnMut(&WindowFocusEvent, &mut WindowContext) -> bool + 'static>;
+    Box<dyn FnMut(&WindowFocusEvent, &mut Window, &mut AppContext) -> bool + 'static>;
 
 struct WindowFocusEvent {
     previous_focus_path: SmallVec<[FocusId; 8]>,
@@ -310,10 +310,10 @@ impl<M: FocusableView + EventEmitter<DismissEvent>> ManagedView for M {}
 /// Emitted by implementers of [`ManagedView`] to indicate the view should be dismissed, such as when a view is presented as a modal.
 pub struct DismissEvent;
 
-type FrameCallback = Box<dyn FnOnce(&mut WindowContext)>;
+type FrameCallback = Box<dyn FnOnce(&mut Window, &mut AppContext)>;
 
 pub(crate) type AnyMouseListener =
-    Box<dyn FnMut(&dyn Any, DispatchPhase, &mut WindowContext) + 'static>;
+    Box<dyn FnMut(&dyn Any, DispatchPhase, &mut Window, &mut AppContext) + 'static>;
 
 #[derive(Clone)]
 pub(crate) struct CursorStyleRequest {
@@ -1051,7 +1051,7 @@ impl<'a> WindowContext<'a> {
 
     /// Schedules the given function to be run at the end of the current effect cycle, allowing entities
     /// that are currently on the stack to be returned to the app.
-    pub fn defer(&mut self, f: impl FnOnce(&mut WindowContext) + 'static) {
+    pub fn defer(&mut self, f: impl FnOnce(&mut Window, &mut AppContext) + 'static) {
         let handle = self.window.handle;
         self.app.defer(move |cx| {
             handle.update(cx, |_, cx| f(cx)).ok();
@@ -1064,7 +1064,7 @@ impl<'a> WindowContext<'a> {
     pub fn observe<E, T>(
         &mut self,
         entity: &E,
-        mut on_notify: impl FnMut(E, &mut WindowContext<'_>) + 'static,
+        mut on_notify: impl FnMut(E, &'_ mut Window, &'_ mut AppContext) + 'static,
     ) -> Subscription
     where
         E: Entity<T>,
@@ -1095,7 +1095,7 @@ impl<'a> WindowContext<'a> {
     pub fn subscribe<Emitter, E, Evt>(
         &mut self,
         entity: &E,
-        mut on_event: impl FnMut(E, &Evt, &mut WindowContext<'_>) + 'static,
+        mut on_event: impl FnMut(E, &Evt, &'_ mut Window, &'_ mut AppContext) + 'static,
     ) -> Subscription
     where
         Emitter: EventEmitter<Evt>,
@@ -1130,7 +1130,7 @@ impl<'a> WindowContext<'a> {
     pub fn observe_release<E, T>(
         &self,
         entity: &E,
-        mut on_release: impl FnOnce(&mut T, &mut WindowContext) + 'static,
+        mut on_release: impl FnOnce(&mut T, &mut Window, &mut AppContext) + 'static,
     ) -> Subscription
     where
         E: Entity<T>,
@@ -1156,7 +1156,7 @@ impl<'a> WindowContext<'a> {
     }
 
     /// Schedule the given closure to be run directly after the current frame is rendered.
-    pub fn on_next_frame(&self, callback: impl FnOnce(&mut WindowContext) + 'static) {
+    pub fn on_next_frame(&self, callback: impl FnOnce(&mut Window, &mut AppContext) + 'static) {
         RefCell::borrow_mut(&self.window.next_frame_callbacks).push(Box::new(callback));
     }
 
@@ -2737,7 +2737,12 @@ impl<'a> WindowContext<'a> {
     ///
     /// This method should only be called as part of the request_layout or prepaint phase of element drawing.
     pub fn request_measured_layout<
-        F: FnMut(Size<Option<Pixels>>, Size<AvailableSpace>, &mut WindowContext) -> Size<Pixels>
+        F: FnMut(
+                Size<Option<Pixels>>,
+                Size<AvailableSpace>,
+                &mut Window,
+                &mut AppContext,
+            ) -> Size<Pixels>
             + 'static,
     >(
         &mut self,
@@ -2908,7 +2913,7 @@ impl<'a> WindowContext<'a> {
     /// This method should only be called as part of the paint phase of element drawing.
     pub fn on_mouse_event<Event: MouseEvent>(
         &mut self,
-        mut handler: impl FnMut(&Event, DispatchPhase, &mut WindowContext) + 'static,
+        mut handler: impl FnMut(&Event, DispatchPhase, &mut Window, &mut AppContext) + 'static,
     ) {
         debug_assert_eq!(
             self.window.draw_phase,
@@ -2935,7 +2940,7 @@ impl<'a> WindowContext<'a> {
     /// This method should only be called as part of the paint phase of element drawing.
     pub fn on_key_event<Event: KeyEvent>(
         &mut self,
-        listener: impl Fn(&Event, DispatchPhase, &mut WindowContext) + 'static,
+        listener: impl Fn(&Event, DispatchPhase, &mut Window, &mut AppContext) + 'static,
     ) {
         debug_assert_eq!(
             self.window.draw_phase,
@@ -2960,7 +2965,7 @@ impl<'a> WindowContext<'a> {
     /// This method should only be called as part of the paint phase of element drawing.
     pub fn on_modifiers_changed(
         &mut self,
-        listener: impl Fn(&ModifiersChangedEvent, &mut WindowContext) + 'static,
+        listener: impl Fn(&ModifiersChangedEvent, &mut Window, &mut AppContext) + 'static,
     ) {
         debug_assert_eq!(
             self.window.draw_phase,
@@ -2984,7 +2989,7 @@ impl<'a> WindowContext<'a> {
     pub fn on_focus_in(
         &mut self,
         handle: &FocusHandle,
-        mut listener: impl FnMut(&mut WindowContext) + 'static,
+        mut listener: impl FnMut(&mut Window, &mut AppContext) + 'static,
     ) -> Subscription {
         let focus_id = handle.id;
         let (subscription, activate) =
@@ -3003,7 +3008,7 @@ impl<'a> WindowContext<'a> {
     pub fn on_focus_out(
         &mut self,
         handle: &FocusHandle,
-        mut listener: impl FnMut(FocusOutEvent, &mut WindowContext) + 'static,
+        mut listener: impl FnMut(FocusOutEvent, &mut Window, &mut AppContext) + 'static,
     ) -> Subscription {
         let focus_id = handle.id;
         let (subscription, activate) =
@@ -3588,7 +3593,7 @@ impl<'a> WindowContext<'a> {
     /// is updated.
     pub fn observe_global<G: Global>(
         &mut self,
-        f: impl Fn(&mut WindowContext<'_>) + 'static,
+        f: impl Fn(&'_ mut Window, &'_ mut AppContext) + 'static,
     ) -> Subscription {
         let window_handle = self.window.handle;
         let (subscription, activate) = self.global_observers.insert(
@@ -3761,7 +3766,7 @@ impl<'a> WindowContext<'a> {
         &self,
         view: &View<V>,
         f: impl Fn(&mut V, &E, &mut ViewContext<V>) + 'static,
-    ) -> impl Fn(&E, &mut WindowContext) + 'static {
+    ) -> impl Fn(&E, &mut Window, &mut AppContext) + 'static {
         let view = view.downgrade();
         move |e: &E, cx: &mut WindowContext| {
             view.update(cx, |view, cx| f(view, e, cx)).ok();
@@ -3773,7 +3778,7 @@ impl<'a> WindowContext<'a> {
         &self,
         view: &View<V>,
         f: impl Fn(&mut V, &mut ViewContext<V>) + 'static,
-    ) -> impl Fn(&mut WindowContext) {
+    ) -> impl Fn(&mut Window, &mut AppContext) {
         let view = view.downgrade();
         move |cx: &mut WindowContext| {
             view.update(cx, |view, cx| f(view, cx)).ok();
@@ -3782,7 +3787,10 @@ impl<'a> WindowContext<'a> {
 
     /// Register a callback that can interrupt the closing of the current window based the returned boolean.
     /// If the callback returns false, the window won't be closed.
-    pub fn on_window_should_close(&self, f: impl Fn(&mut WindowContext) -> bool + 'static) {
+    pub fn on_window_should_close(
+        &self,
+        f: impl Fn(&mut Window, &mut AppContext) -> bool + 'static,
+    ) {
         let mut this = self.to_async();
         self.window
             .platform_window
@@ -3798,7 +3806,7 @@ impl<'a> WindowContext<'a> {
     pub fn on_action(
         &mut self,
         action_type: TypeId,
-        listener: impl Fn(&dyn Any, DispatchPhase, &mut WindowContext) + 'static,
+        listener: impl Fn(&dyn Any, DispatchPhase, &mut Window, &mut AppContext) + 'static,
     ) {
         self.window
             .next_frame
@@ -3873,7 +3881,7 @@ impl Context for WindowContext<'_> {
 
     fn update_window<T, F>(&mut self, window: AnyWindowHandle, update: F) -> Result<T>
     where
-        F: FnOnce(AnyView, &mut WindowContext<'_>) -> T,
+        F: FnOnce(AnyView, &'_ mut Window, &'_ mut AppContext) -> T,
     {
         if window == self.window.handle {
             let root_view = self.window.root_view.clone().unwrap();
@@ -4521,7 +4529,7 @@ impl<'a, V: 'static> ViewContext<'a, V> {
     pub fn listener<E: ?Sized>(
         &self,
         f: impl Fn(&mut V, &E, &mut ViewContext<V>) + 'static,
-    ) -> impl Fn(&E, &mut WindowContext) + 'static {
+    ) -> impl Fn(&E, &mut Window, &mut AppContext) + 'static {
         let view = self.view().downgrade();
         move |e: &E, cx: &mut WindowContext| {
             view.update(cx, |view, cx| f(view, e, cx)).ok();
@@ -4572,7 +4580,7 @@ impl<V> Context for ViewContext<'_, V> {
 
     fn update_window<T, F>(&mut self, window: AnyWindowHandle, update: F) -> Result<T>
     where
-        F: FnOnce(AnyView, &mut WindowContext<'_>) -> T,
+        F: FnOnce(AnyView, &'_ mut Window, &'_ mut AppContext) -> T,
     {
         self.window_cx.update_window(window, update)
     }
@@ -4825,7 +4833,7 @@ impl AnyWindowHandle {
     pub fn update<C, R>(
         self,
         cx: &mut C,
-        update: impl FnOnce(AnyView, &mut WindowContext<'_>) -> R,
+        update: impl FnOnce(AnyView, &'_ mut Window, &'_ mut AppContext) -> R,
     ) -> Result<R>
     where
         C: Context,

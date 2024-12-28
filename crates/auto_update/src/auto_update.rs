@@ -4,7 +4,7 @@ use db::kvp::KEY_VALUE_STORE;
 use db::RELEASE_CHANNEL;
 use gpui::{
     actions, AppContext, AsyncAppContext, Context as _, Global, Model, ModelContext,
-    SemanticVersion, Task, WindowContext,
+    SemanticVersion, Task, Window,
 };
 use http_client::{AsyncBody, HttpClient, HttpClientWithUrl};
 use paths::remote_servers_dir;
@@ -172,23 +172,25 @@ pub fn init(http_client: Arc<HttpClientWithUrl>, cx: &mut AppContext) {
     cx.set_global(GlobalAutoUpdate(Some(auto_updater)));
 }
 
-pub fn check(_: &Check, cx: &mut WindowContext) {
+pub fn check(_: &Check, window: &mut Window, cx: &mut AppContext) {
     if let Some(message) = option_env!("ZED_UPDATE_EXPLANATION") {
-        drop(cx.prompt(
+        drop(window.prompt(
             gpui::PromptLevel::Info,
             "Zed was installed via a package manager.",
             Some(message),
             &["Ok"],
+            cx,
         ));
         return;
     }
 
     if let Ok(message) = env::var("ZED_UPDATE_EXPLANATION") {
-        drop(cx.prompt(
+        drop(window.prompt(
             gpui::PromptLevel::Info,
             "Zed was installed via a package manager.",
             Some(&message),
             &["Ok"],
+            cx,
         ));
         return;
     }
@@ -203,11 +205,12 @@ pub fn check(_: &Check, cx: &mut WindowContext) {
     if let Some(updater) = AutoUpdater::get(cx) {
         updater.update(cx, |updater, cx| updater.poll(cx));
     } else {
-        drop(cx.prompt(
+        drop(window.prompt(
             gpui::PromptLevel::Info,
             "Could not check for updates",
             Some("Auto-updates disabled for non-bundled app."),
             &["Ok"],
+            cx,
         ));
     }
 }

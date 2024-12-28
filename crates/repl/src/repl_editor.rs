@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use editor::Editor;
-use gpui::{prelude::*, Entity, View, WeakView, WindowContext};
+use gpui::{prelude::*, Entity, View, WeakView, Window};
 use language::{BufferSnapshot, Language, LanguageName, Point};
 use project::{ProjectItem as _, WorktreeId};
 
@@ -18,14 +18,15 @@ use crate::{
 pub fn assign_kernelspec(
     kernel_specification: KernelSpecification,
     weak_editor: WeakView<Editor>,
-    cx: &mut WindowContext,
+    window: &mut Window,
+    cx: &mut AppContext,
 ) -> Result<()> {
     let store = ReplStore::global(cx);
     if !store.read(cx).is_enabled() {
         return Ok(());
     }
 
-    let worktree_id = crate::repl_editor::worktree_id_for_editor(weak_editor.clone(), cx)
+    let worktree_id = crate::repl_editor::worktree_id_for_editor(weak_editor.clone(), window, cx)
         .context("editor is not in a worktree")?;
 
     store.update(cx, |store, cx| {
@@ -43,7 +44,9 @@ pub fn assign_kernelspec(
         });
     }
 
-    let session = cx.new_view(|cx| Session::new(weak_editor.clone(), fs, kernel_specification, cx));
+    let session = window.new_view(cx, |cx| {
+        Session::new(weak_editor.clone(), fs, kernel_specification, cx)
+    });
 
     weak_editor
         .update(cx, |_editor, cx| {
@@ -70,7 +73,12 @@ pub fn assign_kernelspec(
     Ok(())
 }
 
-pub fn run(editor: WeakView<Editor>, move_down: bool, cx: &mut WindowContext) -> Result<()> {
+pub fn run(
+    editor: WeakView<Editor>,
+    move_down: bool,
+    window: &mut Window,
+    cx: &mut AppContext,
+) -> Result<()> {
     let store = ReplStore::global(cx);
     if !store.read(cx).is_enabled() {
         return Ok(());
@@ -109,7 +117,9 @@ pub fn run(editor: WeakView<Editor>, move_down: bool, cx: &mut WindowContext) ->
             session
         } else {
             let weak_editor = editor.downgrade();
-            let session = cx.new_view(|cx| Session::new(weak_editor, fs, kernel_specification, cx));
+            let session = window.new_view(cx, |cx| {
+                Session::new(weak_editor, fs, kernel_specification, cx)
+            });
 
             editor.update(cx, |_editor, cx| {
                 cx.notify();
@@ -165,7 +175,8 @@ pub enum SessionSupport {
 
 pub fn worktree_id_for_editor(
     editor: WeakView<Editor>,
-    cx: &mut WindowContext,
+    _window: &mut Window,
+    cx: &mut AppContext,
 ) -> Option<WorktreeId> {
     editor.upgrade().and_then(|editor| {
         editor
@@ -179,7 +190,11 @@ pub fn worktree_id_for_editor(
     })
 }
 
-pub fn session(editor: WeakView<Editor>, cx: &mut WindowContext) -> SessionSupport {
+pub fn session(
+    editor: WeakView<Editor>,
+    window: &mut Window,
+    cx: &mut AppContext,
+) -> SessionSupport {
     let store = ReplStore::global(cx);
     let entity_id = editor.entity_id();
 
@@ -187,11 +202,11 @@ pub fn session(editor: WeakView<Editor>, cx: &mut WindowContext) -> SessionSuppo
         return SessionSupport::ActiveSession(session);
     };
 
-    let Some(language) = get_language(editor.clone(), cx) else {
+    let Some(language) = get_language(editor.clone(), window, cx) else {
         return SessionSupport::Unsupported;
     };
 
-    let worktree_id = worktree_id_for_editor(editor.clone(), cx);
+    let worktree_id = worktree_id_for_editor(editor.clone(), window, cx);
 
     let Some(worktree_id) = worktree_id else {
         return SessionSupport::Unsupported;
@@ -213,7 +228,7 @@ pub fn session(editor: WeakView<Editor>, cx: &mut WindowContext) -> SessionSuppo
     }
 }
 
-pub fn clear_outputs(editor: WeakView<Editor>, cx: &mut WindowContext) {
+pub fn clear_outputs(editor: WeakView<Editor>, _window: &mut Window, cx: &mut AppContext) {
     let store = ReplStore::global(cx);
     let entity_id = editor.entity_id();
     let Some(session) = store.read(cx).get_session(entity_id).cloned() else {
@@ -225,7 +240,7 @@ pub fn clear_outputs(editor: WeakView<Editor>, cx: &mut WindowContext) {
     });
 }
 
-pub fn interrupt(editor: WeakView<Editor>, cx: &mut WindowContext) {
+pub fn interrupt(editor: WeakView<Editor>, _window: &mut Window, cx: &mut AppContext) {
     let store = ReplStore::global(cx);
     let entity_id = editor.entity_id();
     let Some(session) = store.read(cx).get_session(entity_id).cloned() else {
@@ -238,7 +253,7 @@ pub fn interrupt(editor: WeakView<Editor>, cx: &mut WindowContext) {
     });
 }
 
-pub fn shutdown(editor: WeakView<Editor>, cx: &mut WindowContext) {
+pub fn shutdown(editor: WeakView<Editor>, _window: &mut Window, cx: &mut AppContext) {
     let store = ReplStore::global(cx);
     let entity_id = editor.entity_id();
     let Some(session) = store.read(cx).get_session(entity_id).cloned() else {
@@ -251,7 +266,7 @@ pub fn shutdown(editor: WeakView<Editor>, cx: &mut WindowContext) {
     });
 }
 
-pub fn restart(editor: WeakView<Editor>, cx: &mut WindowContext) {
+pub fn restart(editor: WeakView<Editor>, _window: &mut Window, cx: &mut AppContext) {
     let Some(editor) = editor.upgrade() else {
         return;
     };
@@ -276,12 +291,12 @@ pub fn setup_editor_session_actions(editor: &mut Editor, editor_handle: WeakView
     editor
         .register_action({
             let editor_handle = editor_handle.clone();
-            move |_: &ClearOutputs, cx| {
+            move |_: &ClearOutputs, window, cx| {
                 if !JupyterSettings::enabled(cx) {
                     return;
                 }
 
-                crate::clear_outputs(editor_handle.clone(), cx);
+                crate::clear_outputs(editor_handle.clone(), window, cx);
             }
         })
         .detach();
@@ -289,12 +304,12 @@ pub fn setup_editor_session_actions(editor: &mut Editor, editor_handle: WeakView
     editor
         .register_action({
             let editor_handle = editor_handle.clone();
-            move |_: &Interrupt, cx| {
+            move |_: &Interrupt, window, cx| {
                 if !JupyterSettings::enabled(cx) {
                     return;
                 }
 
-                crate::interrupt(editor_handle.clone(), cx);
+                crate::interrupt(editor_handle.clone(), window, cx);
             }
         })
         .detach();
@@ -302,12 +317,12 @@ pub fn setup_editor_session_actions(editor: &mut Editor, editor_handle: WeakView
     editor
         .register_action({
             let editor_handle = editor_handle.clone();
-            move |_: &Shutdown, cx| {
+            move |_: &Shutdown, window, cx| {
                 if !JupyterSettings::enabled(cx) {
                     return;
                 }
 
-                crate::shutdown(editor_handle.clone(), cx);
+                crate::shutdown(editor_handle.clone(), window, cx);
             }
         })
         .detach();
@@ -315,12 +330,12 @@ pub fn setup_editor_session_actions(editor: &mut Editor, editor_handle: WeakView
     editor
         .register_action({
             let editor_handle = editor_handle.clone();
-            move |_: &Restart, cx| {
+            move |_: &Restart, window, cx| {
                 if !JupyterSettings::enabled(cx) {
                     return;
                 }
 
-                crate::restart(editor_handle.clone(), cx);
+                crate::restart(editor_handle.clone(), window, cx);
             }
         })
         .detach();
@@ -448,7 +463,11 @@ fn language_supported(language: &Arc<Language>) -> bool {
     }
 }
 
-fn get_language(editor: WeakView<Editor>, cx: &mut WindowContext) -> Option<Arc<Language>> {
+fn get_language(
+    editor: WeakView<Editor>,
+    _window: &mut Window,
+    cx: &mut AppContext,
+) -> Option<Arc<Language>> {
     editor
         .update(cx, |editor, cx| {
             let selection = editor.selections.newest::<usize>(cx);

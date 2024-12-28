@@ -120,7 +120,7 @@ impl NotebookEditor {
             cell_count,
             gpui::ListAlignment::Top,
             px(1000.),
-            move |ix, cx| {
+            move |ix, _window, cx| {
                 view.upgrade()
                     .and_then(|notebook_handle| {
                         notebook_handle.update(cx, |notebook, cx| {
@@ -301,11 +301,16 @@ impl NotebookEditor {
                         Self::button_group(cx)
                             .child(
                                 Self::render_notebook_control("run-all-cells", IconName::Play, cx)
-                                    .tooltip(move |cx| {
-                                        Tooltip::for_action("Execute all cells", &RunAll, cx)
+                                    .tooltip(move |window, cx| {
+                                        Tooltip::for_action(
+                                            "Execute all cells",
+                                            &RunAll,
+                                            window,
+                                            cx,
+                                        )
                                     })
-                                    .on_click(|_, cx| {
-                                        cx.dispatch_action(Box::new(RunAll));
+                                    .on_click(|_, window, cx| {
+                                        window.dispatch_action(Box::new(RunAll), cx);
                                     }),
                             )
                             .child(
@@ -315,11 +320,16 @@ impl NotebookEditor {
                                     cx,
                                 )
                                 .disabled(!has_outputs)
-                                .tooltip(move |cx| {
-                                    Tooltip::for_action("Clear all outputs", &ClearOutputs, cx)
+                                .tooltip(move |window, cx| {
+                                    Tooltip::for_action(
+                                        "Clear all outputs",
+                                        &ClearOutputs,
+                                        window,
+                                        cx,
+                                    )
                                 })
-                                .on_click(|_, cx| {
-                                    cx.dispatch_action(Box::new(ClearOutputs));
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(Box::new(ClearOutputs), cx);
                                 }),
                             ),
                     )
@@ -331,11 +341,11 @@ impl NotebookEditor {
                                     IconName::ArrowUp,
                                     cx,
                                 )
-                                .tooltip(move |cx| {
-                                    Tooltip::for_action("Move cell up", &MoveCellUp, cx)
+                                .tooltip(move |window, cx| {
+                                    Tooltip::for_action("Move cell up", &MoveCellUp, window, cx)
                                 })
-                                .on_click(|_, cx| {
-                                    cx.dispatch_action(Box::new(MoveCellUp));
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(Box::new(MoveCellUp), cx);
                                 }),
                             )
                             .child(
@@ -344,11 +354,11 @@ impl NotebookEditor {
                                     IconName::ArrowDown,
                                     cx,
                                 )
-                                .tooltip(move |cx| {
-                                    Tooltip::for_action("Move cell down", &MoveCellDown, cx)
+                                .tooltip(move |window, cx| {
+                                    Tooltip::for_action("Move cell down", &MoveCellDown, window, cx)
                                 })
-                                .on_click(|_, cx| {
-                                    cx.dispatch_action(Box::new(MoveCellDown));
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(Box::new(MoveCellDown), cx);
                                 }),
                             ),
                     )
@@ -360,20 +370,30 @@ impl NotebookEditor {
                                     IconName::Plus,
                                     cx,
                                 )
-                                .tooltip(move |cx| {
-                                    Tooltip::for_action("Add markdown block", &AddMarkdownBlock, cx)
+                                .tooltip(move |window, cx| {
+                                    Tooltip::for_action(
+                                        "Add markdown block",
+                                        &AddMarkdownBlock,
+                                        window,
+                                        cx,
+                                    )
                                 })
-                                .on_click(|_, cx| {
-                                    cx.dispatch_action(Box::new(AddMarkdownBlock));
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(Box::new(AddMarkdownBlock), cx);
                                 }),
                             )
                             .child(
                                 Self::render_notebook_control("new-code-cell", IconName::Code, cx)
-                                    .tooltip(move |cx| {
-                                        Tooltip::for_action("Add code block", &AddCodeBlock, cx)
+                                    .tooltip(move |window, cx| {
+                                        Tooltip::for_action(
+                                            "Add code block",
+                                            &AddCodeBlock,
+                                            window,
+                                            cx,
+                                        )
                                     })
-                                    .on_click(|_, cx| {
-                                        cx.dispatch_action(Box::new(AddCodeBlock));
+                                    .on_click(|_, window, cx| {
+                                        window.dispatch_action(Box::new(AddCodeBlock), cx);
                                     }),
                             ),
                     ),
@@ -659,7 +679,12 @@ impl Item for NotebookEditor {
         true
     }
 
-    fn tab_content(&self, params: TabContentParams, cx: &WindowContext) -> AnyElement {
+    fn tab_content(
+        &self,
+        params: TabContentParams,
+        _window: &Window,
+        cx: &AppContext,
+    ) -> AnyElement {
         let path = &self.notebook_item.read(cx).path;
         let title = path
             .file_name()
@@ -673,7 +698,7 @@ impl Item for NotebookEditor {
             .into_any_element()
     }
 
-    fn tab_icon(&self, _cx: &WindowContext) -> Option<Icon> {
+    fn tab_icon(&self, _window: &Window, _cx: &AppContext) -> Option<Icon> {
         Some(IconName::Book.into())
     }
 

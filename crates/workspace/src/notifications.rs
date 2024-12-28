@@ -3,7 +3,7 @@ use collections::HashMap;
 use gpui::{
     svg, AnyView, AppContext, AsyncWindowContext, ClipboardItem, DismissEvent, Entity, EntityId,
     EventEmitter, Global, PromptLevel, Render, ScrollHandle, Task, View, ViewContext,
-    VisualContext, WindowContext,
+    VisualContext, Window,
 };
 use language::DiagnosticSeverity;
 
@@ -334,13 +334,13 @@ impl Render for LanguageServerPrompt {
                                     ui::IconButton::new("copy", ui::IconName::Copy)
                                         .on_click({
                                             let message = request.message.clone();
-                                            move |_, cx| {
+                                            move |_, _window, cx| {
                                                 cx.write_to_clipboard(ClipboardItem::new_string(
                                                     message.clone(),
                                                 ))
                                             }
                                         })
-                                        .tooltip(|cx| Tooltip::text("Copy", cx))
+                                        .tooltip(|window, cx| Tooltip::text("Copy", window, cx))
                                         .visible_on_hover(""),
                                 ),
                             )
@@ -350,12 +350,14 @@ impl Render for LanguageServerPrompt {
                         let this_handle = cx.view().clone();
                         ui::Button::new(ix, action.title.clone())
                             .size(ButtonSize::Large)
-                            .on_click(move |_, cx| {
+                            .on_click(move |_, window, cx| {
                                 let this_handle = this_handle.clone();
-                                cx.spawn(|cx| async move {
-                                    LanguageServerPrompt::select_option(this_handle, ix, cx).await
-                                })
-                                .detach()
+                                window
+                                    .spawn(cx, |cx| async move {
+                                        LanguageServerPrompt::select_option(this_handle, ix, cx)
+                                            .await
+                                    })
+                                    .detach()
                             })
                     })),
             )
@@ -432,7 +434,7 @@ impl Render for ErrorMessagePrompt {
                         elm.child(
                             div().mt_2().child(
                                 ui::Button::new("error_message_prompt_notification_button", label)
-                                    .on_click(move |_, cx| cx.open_url(&url)),
+                                    .on_click(move |_, _window, cx| cx.open_url(&url)),
                             ),
                         )
                     }),
@@ -591,7 +593,7 @@ where
             Ok(value) => Some(value),
             Err(err) => {
                 log::error!("{err:?}");
-                cx.update_root(|view, cx| {
+                cx.update_root(|view, _window, cx| {
                     if let Ok(workspace) = view.downcast::<Workspace>() {
                         workspace.update(cx, |workspace, cx| workspace.show_error(&err, cx))
                     }
@@ -604,7 +606,7 @@ where
 }
 
 pub trait NotifyTaskExt {
-    fn detach_and_notify_err(self, cx: &mut WindowContext);
+    fn detach_and_notify_err(self, _window: &mut Window, cx: &mut AppContext);
 }
 
 impl<R, E> NotifyTaskExt for Task<Result<R, E>>
@@ -612,8 +614,12 @@ where
     E: std::fmt::Debug + std::fmt::Display + Sized + 'static,
     R: 'static,
 {
-    fn detach_and_notify_err(self, cx: &mut WindowContext) {
-        cx.spawn(|mut cx| async move { self.await.notify_async_err(&mut cx) })
+    fn detach_and_notify_err(self, window: &mut Window, cx: &mut AppContext) {
+        window
+            .spawn(
+                cx,
+                |mut cx| async move { self.await.notify_async_err(&mut cx) },
+            )
             .detach();
     }
 }
@@ -622,15 +628,17 @@ pub trait DetachAndPromptErr<R> {
     fn prompt_err(
         self,
         msg: &str,
-        cx: &mut WindowContext,
-        f: impl FnOnce(&anyhow::Error, &mut WindowContext) -> Option<String> + 'static,
+        _window: &mut Window,
+        cx: &mut AppContext,
+        f: impl FnOnce(&anyhow::Error, &mut Window, &mut AppContext) -> Option<String> + 'static,
     ) -> Task<Option<R>>;
 
     fn detach_and_prompt_err(
         self,
         msg: &str,
-        cx: &mut WindowContext,
-        f: impl FnOnce(&anyhow::Error, &mut WindowContext) -> Option<String> + 'static,
+        _window: &mut Window,
+        cx: &mut AppContext,
+        f: impl FnOnce(&anyhow::Error, &mut Window, &mut AppContext) -> Option<String> + 'static,
     );
 }
 
@@ -641,17 +649,19 @@ where
     fn prompt_err(
         self,
         msg: &str,
-        cx: &mut WindowContext,
-        f: impl FnOnce(&anyhow::Error, &mut WindowContext) -> Option<String> + 'static,
+        window: &mut Window,
+        cx: &mut AppContext,
+        f: impl FnOnce(&anyhow::Error, &mut Window, &mut AppContext) -> Option<String> + 'static,
     ) -> Task<Option<R>> {
         let msg = msg.to_owned();
-        cx.spawn(|mut cx| async move {
+        window.spawn(cx, |mut cx| async move {
             let result = self.await;
             if let Err(err) = result.as_ref() {
                 log::error!("{err:?}");
-                if let Ok(prompt) = cx.update(|cx| {
-                    let detail = f(err, cx).unwrap_or_else(|| format!("{err}. Please try again."));
-                    cx.prompt(PromptLevel::Critical, &msg, Some(&detail), &["Ok"])
+                if let Ok(prompt) = cx.update(|window, cx| {
+                    let detail =
+                        f(err, window, cx).unwrap_or_else(|| format!("{err}. Please try again."));
+                    window.prompt(PromptLevel::Critical, &msg, Some(&detail), &["Ok"], cx)
                 }) {
                     prompt.await.ok();
                 }
@@ -664,9 +674,10 @@ where
     fn detach_and_prompt_err(
         self,
         msg: &str,
-        cx: &mut WindowContext,
-        f: impl FnOnce(&anyhow::Error, &mut WindowContext) -> Option<String> + 'static,
+        window: &mut Window,
+        cx: &mut AppContext,
+        f: impl FnOnce(&anyhow::Error, &mut Window, &mut AppContext) -> Option<String> + 'static,
     ) {
-        self.prompt_err(msg, cx, f).detach();
+        self.prompt_err(msg, window, cx, f).detach();
     }
 }

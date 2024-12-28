@@ -55,8 +55,8 @@ impl VimTestContext {
     }
 
     pub fn new_with_lsp(mut cx: EditorLspTestContext, enabled: bool) -> VimTestContext {
-        cx.update(|cx| {
-            SettingsStore::update_global(cx, |store, cx| {
+        cx.update(|_window, cx| {
+            SettingsStore::update_global(cx, |store, _window, cx| {
                 store.update_user_settings::<VimModeSetting>(cx, |s| *s = Some(enabled));
             });
             settings::KeymapFile::load_asset("keymaps/default-macos.json", cx).unwrap();
@@ -91,7 +91,7 @@ impl VimTestContext {
         F: FnOnce(&mut T, &mut ViewContext<T>) -> R + 'static,
     {
         let window = self.window;
-        self.update_window(window, move |_, cx| view.update(cx, update))
+        self.update_window(window, move |_, _window, cx| view.update(cx, update))
             .unwrap()
     }
 
@@ -103,16 +103,16 @@ impl VimTestContext {
     }
 
     pub fn enable_vim(&mut self) {
-        self.cx.update(|cx| {
-            SettingsStore::update_global(cx, |store, cx| {
+        self.cx.update(|_window, cx| {
+            SettingsStore::update_global(cx, |store, _window, cx| {
                 store.update_user_settings::<VimModeSetting>(cx, |s| *s = Some(true));
             });
         })
     }
 
     pub fn disable_vim(&mut self) {
-        self.cx.update(|cx| {
-            SettingsStore::update_global(cx, |store, cx| {
+        self.cx.update(|_window, cx| {
+            SettingsStore::update_global(cx, |store, _window, cx| {
                 store.update_user_settings::<VimModeSetting>(cx, |s| *s = Some(false));
             });
         })
@@ -139,7 +139,7 @@ impl VimTestContext {
         self.cx.set_state(text);
         let vim = self.update_editor(|editor, _cx| editor.addon::<VimAddon>().cloned().unwrap());
 
-        self.update(|cx| {
+        self.update(|_window, cx| {
             vim.view.update(cx, |vim, cx| {
                 vim.switch_mode(mode, true, cx);
             });

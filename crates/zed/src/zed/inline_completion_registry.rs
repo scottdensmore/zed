@@ -42,7 +42,7 @@ pub fn init(client: Arc<Client>, cx: &mut AppContext) {
 
     let mut provider = all_language_settings(None, cx).inline_completions.provider;
     for (editor, window) in editors.borrow().iter() {
-        _ = window.update(cx, |_window, cx| {
+        _ = window.update(cx, |_window, _window, cx| {
             _ = editor.update(cx, |editor, cx| {
                 assign_inline_completion_provider(editor, provider, &client, cx);
             })
@@ -93,7 +93,7 @@ fn assign_inline_completion_providers(
     cx: &mut AppContext,
 ) {
     for (editor, window) in editors.borrow().iter() {
-        _ = window.update(cx, |_window, cx| {
+        _ = window.update(cx, |_window, _window, cx| {
             _ = editor.update(cx, |editor, cx| {
                 assign_inline_completion_provider(editor, provider, &client, cx);
             })

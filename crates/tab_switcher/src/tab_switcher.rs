@@ -197,7 +197,7 @@ impl TabSwitcherDelegate {
         .detach();
     }
 
-    fn update_matches(&mut self, cx: &mut WindowContext) {
+    fn update_matches(&mut self, _window: &mut Window, cx: &mut AppContext) {
         self.matches.clear();
         let Some(pane) = self.pane.upgrade() else {
             return;
@@ -280,11 +280,11 @@ impl TabSwitcherDelegate {
 impl PickerDelegate for TabSwitcherDelegate {
     type ListItem = ListItem;
 
-    fn placeholder_text(&self, _cx: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, _window: &mut Window, _cx: &mut AppContext) -> Arc<str> {
         Arc::default()
     }
 
-    fn no_matches_text(&self, _cx: &mut WindowContext) -> SharedString {
+    fn no_matches_text(&self, _window: &mut Window, _cx: &mut AppContext) -> SharedString {
         "No tabs".into()
     }
 
@@ -399,7 +399,7 @@ impl PickerDelegate for TabSwitcherDelegate {
                 IconButton::new("close_tab", IconName::Close)
                     .icon_size(IconSize::Small)
                     .icon_color(indicator_color)
-                    .tooltip(|cx| Tooltip::text("Close", cx)),
+                    .tooltip(|window, cx| Tooltip::text("Close", window, cx)),
             )
             .into_any_element();
 

@@ -367,7 +367,7 @@ async fn test_channel_message_changes(
 
     executor.run_until_parked();
 
-    let b_has_messages = cx_b.update(|cx| {
+    let b_has_messages = cx_b.update(|_window, cx| {
         client_b
             .channel_store()
             .read(cx)
@@ -384,7 +384,7 @@ async fn test_channel_message_changes(
 
     executor.run_until_parked();
 
-    let b_has_messages = cx_b.update(|cx| {
+    let b_has_messages = cx_b.update(|_window, cx| {
         client_b
             .channel_store()
             .read(cx)
@@ -406,7 +406,7 @@ async fn test_channel_message_changes(
 
     executor.run_until_parked();
 
-    let b_has_messages = cx_b.update(|cx| {
+    let b_has_messages = cx_b.update(|_window, cx| {
         client_b
             .channel_store()
             .read(cx)
@@ -425,7 +425,7 @@ async fn test_channel_message_changes(
 
     executor.run_until_parked();
 
-    let b_has_messages = cx_b.update(|cx| {
+    let b_has_messages = cx_b.update(|_window, cx| {
         client_b
             .channel_store()
             .read(cx)

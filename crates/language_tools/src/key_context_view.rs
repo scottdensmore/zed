@@ -8,7 +8,7 @@ use settings::get_key_equivalents;
 use ui::{
     div, h_flex, px, v_flex, ButtonCommon, Clickable, FluentBuilder, InteractiveElement, Label,
     LabelCommon, LabelSize, ParentElement, SharedString, StatefulInteractiveElement, Styled,
-    ViewContext, VisualContext, WindowContext,
+    ViewContext, VisualContext, Window,
 };
 use ui::{Button, ButtonStyle};
 use workspace::Item;
@@ -145,7 +145,7 @@ impl Item for KeyContextView {
 
     fn to_item_events(_: &Self::Event, _: impl FnMut(workspace::item::ItemEvent)) {}
 
-    fn tab_content_text(&self, _cx: &WindowContext) -> Option<SharedString> {
+    fn tab_content_text(&self, _window: &Window, _cx: &AppContext) -> Option<SharedString> {
         Some("Keyboard Context".into())
     }
 
@@ -203,7 +203,7 @@ impl Render for KeyContextView {
                     .child(
                         Button::new("default", "Open Documentation")
                             .style(ButtonStyle::Filled)
-                            .on_click(|_, cx| cx.open_url("https://zed.dev/docs/key-bindings")),
+                            .on_click(|_, _window, cx| cx.open_url("https://zed.dev/docs/key-bindings")),
                     )
                     .child(
                         Button::new("default", "View default keymap")
@@ -212,18 +212,18 @@ impl Render for KeyContextView {
                                 &zed_actions::OpenDefaultKeymap,
                                 cx,
                             ))
-                            .on_click(|_, cx| {
-                                cx.dispatch_action(workspace::SplitRight.boxed_clone());
-                                cx.dispatch_action(zed_actions::OpenDefaultKeymap.boxed_clone());
+                            .on_click(|_, window, cx| {
+                                window.dispatch_action(workspace::SplitRight.boxed_clone(), cx);
+                                window.dispatch_action(zed_actions::OpenDefaultKeymap.boxed_clone(), cx);
                             }),
                     )
                     .child(
                         Button::new("default", "Edit your keymap")
                             .style(ButtonStyle::Filled)
                             .key_binding(ui::KeyBinding::for_action(&zed_actions::OpenKeymap, cx))
-                            .on_click(|_, cx| {
-                                cx.dispatch_action(workspace::SplitRight.boxed_clone());
-                                cx.dispatch_action(zed_actions::OpenKeymap.boxed_clone());
+                            .on_click(|_, window, cx| {
+                                window.dispatch_action(workspace::SplitRight.boxed_clone(), cx);
+                                window.dispatch_action(zed_actions::OpenKeymap.boxed_clone(), cx);
                             }),
                     ),
             )

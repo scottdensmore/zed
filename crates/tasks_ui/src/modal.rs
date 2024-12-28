@@ -13,8 +13,7 @@ use task::{ResolvedTask, RevealTarget, TaskContext, TaskTemplate};
 use ui::{
     div, h_flex, v_flex, ActiveTheme, Button, ButtonCommon, ButtonSize, Clickable, Color,
     FluentBuilder as _, Icon, IconButton, IconButtonShape, IconName, IconSize, IntoElement,
-    KeyBinding, LabelSize, ListItem, ListItemSpacing, RenderOnce, Toggleable, Tooltip,
-    WindowContext,
+    KeyBinding, LabelSize, ListItem, ListItemSpacing, RenderOnce, Toggleable, Tooltip, Window,
 };
 use util::ResultExt;
 use workspace::{tasks::schedule_resolved_task, ModalView, Workspace};
@@ -178,7 +177,7 @@ impl PickerDelegate for TasksModalDelegate {
         self.selected_index = ix;
     }
 
-    fn placeholder_text(&self, _: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, _: &mut Window, _: &mut AppContext) -> Arc<str> {
         self.placeholder_text.clone()
     }
 
@@ -402,8 +401,8 @@ impl PickerDelegate for TasksModalDelegate {
                                         .checked_sub(1);
                                     picker.refresh(cx);
                                 }))
-                                .tooltip(|cx| {
-                                    Tooltip::text("Delete Previously Scheduled Task", cx)
+                                .tooltip(|window, cx| {
+                                    Tooltip::text("Delete Previously Scheduled Task", window, cx)
                                 }),
                         );
                         item.end_hover_slot(delete_button)
@@ -489,8 +488,8 @@ impl PickerDelegate for TasksModalDelegate {
                             Button::new("edit-current-task", label)
                                 .label_size(LabelSize::Small)
                                 .when_some(keybind, |this, keybind| this.key_binding(keybind))
-                                .on_click(move |_, cx| {
-                                    cx.dispatch_action(action.boxed_clone());
+                                .on_click(move |_, window, cx| {
+                                    window.dispatch_action(action.boxed_clone(), cx);
                                 })
                                 .into_any_element()
                         })
@@ -513,7 +512,9 @@ impl PickerDelegate for TasksModalDelegate {
                             Button::new("spawn-onehshot", spawn_oneshot_label)
                                 .label_size(LabelSize::Small)
                                 .key_binding(keybind)
-                                .on_click(move |_, cx| cx.dispatch_action(action.boxed_clone()))
+                                .on_click(move |_, window, cx| {
+                                    window.dispatch_action(action.boxed_clone(), cx)
+                                })
                         }))
                     } else if current_modifiers.secondary() {
                         this.children(KeyBinding::for_action(&menu::SecondaryConfirm, cx).map(
@@ -526,8 +527,11 @@ impl PickerDelegate for TasksModalDelegate {
                                 Button::new("spawn", label)
                                     .label_size(LabelSize::Small)
                                     .key_binding(keybind)
-                                    .on_click(move |_, cx| {
-                                        cx.dispatch_action(menu::SecondaryConfirm.boxed_clone())
+                                    .on_click(move |_, window, cx| {
+                                        window.dispatch_action(
+                                            menu::SecondaryConfirm.boxed_clone(),
+                                            cx,
+                                        )
                                     })
                             },
                         ))
@@ -539,8 +543,8 @@ impl PickerDelegate for TasksModalDelegate {
                             Button::new("spawn", run_entry_label)
                                 .label_size(LabelSize::Small)
                                 .key_binding(keybind)
-                                .on_click(|_, cx| {
-                                    cx.dispatch_action(menu::Confirm.boxed_clone());
+                                .on_click(|_, window, cx| {
+                                    window.dispatch_action(menu::Confirm.boxed_clone(), cx);
                                 })
                         }))
                     }
@@ -813,7 +817,9 @@ mod tests {
             .await
             .unwrap();
 
-        let editor = cx.update(|cx| second_item.act_as::<Editor>(cx)).unwrap();
+        let editor = cx
+            .update(|_window, cx| second_item.act_as::<Editor>(cx))
+            .unwrap();
         editor.update(cx, |editor, cx| {
             editor.change_selections(None, cx, |s| {
                 s.select_ranges(Some(Point::new(1, 2)..Point::new(1, 5)))

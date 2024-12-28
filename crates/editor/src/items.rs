@@ -13,7 +13,7 @@ use git::repository::GitFileStatus;
 use gpui::{
     point, AnyElement, AppContext, AsyncWindowContext, Context, Entity, EntityId, EventEmitter,
     IntoElement, Model, ParentElement, Pixels, SharedString, Styled, Task, View, ViewContext,
-    VisualContext, WeakView, WindowContext,
+    VisualContext, WeakView, Window,
 };
 use language::{
     proto::serialize_anchor as serialize_text_anchor, Bias, Buffer, CharKind, DiskState, Point,
@@ -61,7 +61,8 @@ impl FollowableItem for Editor {
         workspace: View<Workspace>,
         remote_id: ViewId,
         state: &mut Option<proto::view::Variant>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Option<Task<Result<View<Self>>>> {
         let project = workspace.read(cx).project().to_owned();
         let Some(proto::view::Variant::Editor(_)) = state else {
@@ -83,13 +84,13 @@ impl FollowableItem for Editor {
                 .collect::<Result<Vec<_>>>()
         });
 
-        Some(cx.spawn(|mut cx| async move {
+        Some(window.spawn(cx, |mut cx| async move {
             let mut buffers = futures::future::try_join_all(buffers?)
                 .await
                 .debug_assert_ok("leaders don't share views for unshared buffers")?;
 
-            let editor = cx.update(|cx| {
-                let multibuffer = cx.new_model(|cx| {
+            let editor = cx.update(|window, cx| {
+                let multibuffer = window.new_model(cx, |cx| {
                     let mut multibuffer;
                     if state.singleton && buffers.len() == 1 {
                         multibuffer = MultiBuffer::singleton(buffers.pop().unwrap(), cx)
@@ -124,7 +125,7 @@ impl FollowableItem for Editor {
                     multibuffer
                 });
 
-                cx.new_view(|cx| {
+                window.new_view(cx, |cx| {
                     let mut editor =
                         Editor::for_multibuffer(multibuffer, Some(project.clone()), true, cx);
                     editor.remote_id = Some(remote_id);
@@ -170,7 +171,7 @@ impl FollowableItem for Editor {
         cx.notify();
     }
 
-    fn to_state_proto(&self, cx: &WindowContext) -> Option<proto::view::Variant> {
+    fn to_state_proto(&self, _window: &Window, cx: &AppContext) -> Option<proto::view::Variant> {
         let buffer = self.buffer.read(cx);
         if buffer
             .as_singleton()
@@ -240,7 +241,8 @@ impl FollowableItem for Editor {
         &self,
         event: &EditorEvent,
         update: &mut Option<proto::update_view::Variant>,
-        cx: &WindowContext,
+        _window: &Window,
+        cx: &AppContext,
     ) -> bool {
         let update =
             update.get_or_insert_with(|| proto::update_view::Variant::Editor(Default::default()));
@@ -313,11 +315,11 @@ impl FollowableItem for Editor {
         })
     }
 
-    fn is_project_item(&self, _cx: &WindowContext) -> bool {
+    fn is_project_item(&self, _window: &Window, _cx: &AppContext) -> bool {
         true
     }
 
-    fn dedup(&self, existing: &Self, cx: &WindowContext) -> Option<Dedup> {
+    fn dedup(&self, existing: &Self, _window: &Window, cx: &AppContext) -> Option<Dedup> {
         let self_singleton = self.buffer.read(cx).as_singleton()?;
         let other_singleton = existing.buffer.read(cx).as_singleton()?;
         if self_singleton == other_singleton {
@@ -595,7 +597,7 @@ impl Item for Editor {
         Some(path.to_string_lossy().to_string().into())
     }
 
-    fn tab_icon(&self, cx: &WindowContext) -> Option<Icon> {
+    fn tab_icon(&self, _window: &Window, cx: &AppContext) -> Option<Icon> {
         ItemSettings::get_global(cx)
             .file_icons
             .then(|| {
@@ -609,7 +611,12 @@ impl Item for Editor {
             .map(Icon::from_path)
     }
 
-    fn tab_content(&self, params: TabContentParams, cx: &WindowContext) -> AnyElement {
+    fn tab_content(
+        &self,
+        params: TabContentParams,
+        _window: &Window,
+        cx: &AppContext,
+    ) -> AnyElement {
         let label_color = if ItemSettings::get_global(cx).git_status {
             self.buffer()
                 .read(cx)
@@ -944,9 +951,10 @@ impl SerializableItem for Editor {
     fn cleanup(
         workspace_id: WorkspaceId,
         alive_items: Vec<ItemId>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<Result<()>> {
-        cx.spawn(|_| DB.delete_unloaded_items(workspace_id, alive_items))
+        window.spawn(cx, |_| DB.delete_unloaded_items(workspace_id, alive_items))
     }
 
     fn deserialize(
@@ -954,7 +962,8 @@ impl SerializableItem for Editor {
         workspace: WeakView<Workspace>,
         workspace_id: workspace::WorkspaceId,
         item_id: ItemId,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut AppContext,
     ) -> Task<Result<View<Self>>> {
         let serialized_editor = match DB
             .get_serialized_editor(item_id, workspace_id)
@@ -989,7 +998,7 @@ impl SerializableItem for Editor {
                 contents: Some(contents),
                 language,
                 ..
-            } => cx.spawn(|mut cx| {
+            } => window.spawn(cx, |mut cx| {
                 let project = project.clone();
                 async move {
                     let language = if let Some(language_name) = language {
@@ -1019,8 +1028,8 @@ impl SerializableItem for Editor {
                         buffer.set_text(contents, cx);
                     })?;
 
-                    cx.update(|cx| {
-                        cx.new_view(|cx| {
+                    cx.update(|window, cx| {
+                        window.new_view(cx, |cx| {
                             let mut editor = Editor::for_buffer(buffer, Some(project), cx);
 
                             editor.read_scroll_position_from_db(item_id, workspace_id, cx);
@@ -1046,7 +1055,7 @@ impl SerializableItem for Editor {
 
                 match project_item {
                     Some(project_item) => {
-                        cx.spawn(|mut cx| async move {
+                        window.spawn(cx, |mut cx| async move {
                             let (_, project_item) = project_item.await?;
                             let buffer = project_item.downcast::<Buffer>().map_err(|_| {
                                 anyhow!("Project item at stored path was not a buffer")
@@ -1073,8 +1082,8 @@ impl SerializableItem for Editor {
                                 })?;
                             }
 
-                            cx.update(|cx| {
-                                cx.new_view(|cx| {
+                            cx.update(|window, cx| {
+                                window.new_view(cx, |cx| {
                                     let mut editor = Editor::for_buffer(buffer, Some(project), cx);
 
                                     editor.read_scroll_position_from_db(item_id, workspace_id, cx);
@@ -1087,7 +1096,7 @@ impl SerializableItem for Editor {
                         let open_by_abs_path = workspace.update(cx, |workspace, cx| {
                             workspace.open_abs_path(abs_path.clone(), false, cx)
                         });
-                        cx.spawn(|mut cx| async move {
+                        window.spawn(cx, |mut cx| async move {
                             let editor = open_by_abs_path?.await?.downcast::<Editor>().with_context(|| format!("Failed to downcast to Editor after opening abs path {abs_path:?}"))?;
                             editor.update(&mut cx, |editor, cx| {
                                 editor.read_scroll_position_from_db(item_id, workspace_id, cx);
@@ -1202,7 +1211,7 @@ pub(crate) enum BufferSearchHighlights {}
 impl SearchableItem for Editor {
     type Match = Range<Anchor>;
 
-    fn get_matches(&self, _: &mut WindowContext) -> Vec<Range<Anchor>> {
+    fn get_matches(&self, _: &mut Window, _: &mut AppContext) -> Vec<Range<Anchor>> {
         self.background_highlights
             .get(&TypeId::of::<BufferSearchHighlights>())
             .map_or(Vec::new(), |(_color, ranges)| {

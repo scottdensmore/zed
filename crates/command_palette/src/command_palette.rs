@@ -233,7 +233,7 @@ impl CommandPaletteDelegate {
 impl PickerDelegate for CommandPaletteDelegate {
     type ListItem = ListItem;
 
-    fn placeholder_text(&self, _cx: &mut WindowContext) -> Arc<str> {
+    fn placeholder_text(&self, _window: &mut Window, _cx: &mut AppContext) -> Arc<str> {
         "Execute a command...".into()
     }
 
@@ -536,7 +536,7 @@ mod tests {
         });
 
         // Add namespace filter, and redeploy the palette
-        cx.update(|cx| {
+        cx.update(|_window, cx| {
             CommandPaletteFilter::update_global(cx, |filter, _| {
                 filter.hide_namespace("editor");
             });

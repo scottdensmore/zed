@@ -144,7 +144,7 @@ impl EditorLspTestContext {
             })
             .await
             .expect("Could not open test file");
-        let editor = cx.update(|cx| {
+        let editor = cx.update(|_window, cx| {
             item.act_as::<Editor>(cx)
                 .expect("Opened test file wasn't an editor")
         });

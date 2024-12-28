@@ -247,7 +247,7 @@ impl Render for MessageEditor {
                     })
                     .child(
                         PopoverMenu::new("inline-context-picker")
-                            .menu(move |_cx| Some(inline_context_picker.clone()))
+                            .menu(move |_window, _cx| Some(inline_context_picker.clone()))
                             .attach(gpui::Corner::TopLeft)
                             .anchor(gpui::Corner::BottomLeft)
                             .offset(gpui::Point {
@@ -282,8 +282,8 @@ impl Render for MessageEditor {
                                             KeyBinding::for_action_in(&Chat, &focus_handle, cx)
                                                 .map(|binding| binding.into_any_element()),
                                         )
-                                        .on_click(move |_event, cx| {
-                                            focus_handle.dispatch_action(&Chat, cx);
+                                        .on_click(move |_event, window, cx| {
+                                            focus_handle.dispatch_action(&Chat, window, cx);
                                         }),
                                 ),
                             ),
